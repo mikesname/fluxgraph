@@ -58,7 +58,7 @@ public class FluxIndex<T extends Element> implements Index<T> {
     }
 
     public CloseableIterable<T> get(final String key, final Object value) {
-        boolean matched = ((indexKeys == null) || ((indexKeys != null) && indexKeys.contains(key)));
+        boolean matched = ((indexKeys == null) || (indexKeys.contains(key)));
         Keyword attribute = null;
         if ((this.getIndexClass().isAssignableFrom(FluxEdge.class)) && ("label".equals(key))) {
             attribute = Keyword.intern("graph.edge/label");
@@ -92,7 +92,7 @@ public class FluxIndex<T extends Element> implements Index<T> {
     }
 
     public long count(final String key, final Object value) {
-        boolean matched = ((indexKeys == null) || ((indexKeys != null) && indexKeys.contains(key)));
+        boolean matched = ((indexKeys == null) || (indexKeys.contains(key)));
         Keyword attribute = null;
         if ((this.getIndexClass().isAssignableFrom(FluxEdge.class)) && ("label".equals(key))) {
             attribute = Keyword.intern("graph.edge/label");

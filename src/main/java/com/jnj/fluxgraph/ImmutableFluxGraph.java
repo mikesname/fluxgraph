@@ -10,11 +10,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 /**
- * Created with IntelliJ IDEA.
- * User: dsuvee
- * Date: 09/09/12
- * Time: 16:42
- * To change this template use File | Settings | File Templates.
+ * @author Davy Suvee (http://datablend.be)
  */
 public class ImmutableFluxGraph extends FluxGraph {
 

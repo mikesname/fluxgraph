@@ -108,8 +108,8 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
             throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE);
         }
         // Create the required indexes
-        this.vertexIndex = new FluxIndex("vertexIndex", this, null, Vertex.class);
-        this.edgeIndex = new FluxIndex("edgeIndex", this, null, Edge.class);
+        this.vertexIndex = new FluxIndex<Vertex>("vertexIndex", this, null, Vertex.class);
+        this.edgeIndex = new FluxIndex<Edge>("edgeIndex", this, null, Edge.class);
     }
 
     @Override
@@ -127,7 +127,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         if (null == id)
             throw ExceptionFactory.edgeIdCanNotBeNull();
         try {
-            return new FluxEdge(this, this.getRawGraph(), Long.valueOf(id.toString()).longValue());
+            return new FluxEdge(this, this.getRawGraph(), Long.valueOf(id.toString()));
         } catch (NumberFormatException e) {
             return null;
         } catch (RuntimeException re) {
@@ -203,7 +203,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         if (null == id)
             throw ExceptionFactory.vertexIdCanNotBeNull();
         try {
-            final Long longId = Long.valueOf(id.toString()).longValue();
+            final Long longId = Long.valueOf(id.toString());
             return new FluxVertex(this, this.getRawGraph(), longId);
         } catch (NumberFormatException e) {
             return null;

@@ -93,14 +93,14 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
             while (edgesit.hasNext()) {
                 vertices.add(edgesit.next().getVertex(Direction.IN).getId());
             }
-            return new FluxIterable(vertices, fluxGraph, database, Vertex.class);
+            return new FluxIterable<Vertex>(vertices, fluxGraph, database, Vertex.class);
         } else if (direction.equals(Direction.IN)) {
             Iterator<Edge> edgesit = this.getInEdges(labels).iterator();
             List<Object> vertices = new ArrayList<Object>();
             while (edgesit.hasNext()) {
                 vertices.add(edgesit.next().getVertex(Direction.OUT).getId());
             }
-            return new FluxIterable(vertices, fluxGraph, database, Vertex.class);
+            return new FluxIterable<Vertex>(vertices, fluxGraph, database, Vertex.class);
         }
         else {
             Iterator<Edge> outEdgesIt = this.getOutEdges(labels).iterator();
@@ -113,7 +113,9 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
             while (inEdgesIt.hasNext()) {
                 invertices.add(inEdgesIt.next().getVertex(Direction.OUT).getId());
             }
-            return new MultiIterable<Vertex>(Arrays.<Iterable<Vertex>>asList(new FluxIterable(outvertices, fluxGraph, database, Vertex.class), new FluxIterable(invertices, fluxGraph, database, Vertex.class)));
+            return new MultiIterable<Vertex>(Arrays.<Iterable<Vertex>>asList(
+                    new FluxIterable<Vertex>(outvertices, fluxGraph, database, Vertex.class),
+                    new FluxIterable<Vertex>(invertices, fluxGraph, database, Vertex.class)));
         }
     }
 
@@ -161,12 +163,12 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
                                                    ":in $ ?vertex [?label ...] " +
                                                    ":where [?edge :graph.edge/inVertex ?vertex] " +
                                                           "[?edge :graph.edge/label ?label ] ]", getDatabase(), id, labels);
-        return new FluxIterable(inEdges, fluxGraph, database, Edge.class);
+        return new FluxIterable<Edge>(inEdges, fluxGraph, database, Edge.class);
     }
 
     private Iterable<Edge> getInEdges() {
         Iterable<Datom> inEdges = getDatabase().datoms(Database.AVET, fluxGraph.GRAPH_EDGE_IN_VERTEX, getId());
-        return new FluxIterable(inEdges, fluxGraph, database, Edge.class);
+        return new FluxIterable<Edge>(inEdges, fluxGraph, database, Edge.class);
     }
 
     private Iterable<Edge> getOutEdges(final String... labels) {
@@ -177,12 +179,12 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
                                                     ":in $ ?vertex [?label ...] " +
                                                     ":where [?edge :graph.edge/outVertex ?vertex] " +
                                                            "[?edge :graph.edge/label ?label ] ]", getDatabase(), id, labels);
-        return new FluxIterable(outEdges, fluxGraph, database, Edge.class);
+        return new FluxIterable<Edge>(outEdges, fluxGraph, database, Edge.class);
     }
 
     private Iterable<Edge> getOutEdges() {
         Iterable<Datom> outEdges = getDatabase().datoms(Database.AVET, fluxGraph.GRAPH_EDGE_OUT_VERTEX, getId());
-        return new FluxIterable(outEdges, fluxGraph, database, Edge.class);
+        return new FluxIterable<Edge>(outEdges, fluxGraph, database, Edge.class);
     }
 
     @Override
