@@ -5,6 +5,8 @@ import com.tinkerpop.blueprints.*;
 import com.tinkerpop.blueprints.util.DefaultGraphQuery;
 import com.tinkerpop.blueprints.util.ExceptionFactory;
 import com.tinkerpop.blueprints.util.StringFactory;
+import static datomic.Connection.TEMPIDS;
+import static datomic.Connection.DB_AFTER;
 import datomic.*;
 
 import java.util.*;
@@ -15,7 +17,7 @@ import java.util.concurrent.ExecutionException;
  *
  * @author Davy Suvee (http://datablend.be)
  */
-public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAwareGraph {
+public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAwareGraph, TransactionalGraph {
 
     private final String graphURI;
     private final Connection connection;
@@ -46,6 +48,11 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
             return null;
         }
     };
+    protected final ThreadLocal<Map<Object,FluxElement>> dirty = new ThreadLocal<Map<Object,FluxElement>>() {
+        protected Map<Object,FluxElement> initialValue() {
+            return new HashMap<Object, FluxElement>();
+        }
+    };
 
     private static final Features FEATURES = new Features();
 
@@ -62,7 +69,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         FEATURES.supportsEdgeRetrieval = true;
         FEATURES.supportsVertexProperties = true;
         FEATURES.supportsEdgeProperties = true;
-        FEATURES.supportsTransactions = false;
+        FEATURES.supportsTransactions = true;
         FEATURES.supportsIndices = false;
 
         FEATURES.supportsSerializableObjectProperty = false;
@@ -82,6 +89,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         FEATURES.supportsVertexKeyIndex = true;
         FEATURES.supportsEdgeKeyIndex = true;
         FEATURES.supportsThreadedTransactions = false;
+        FEATURES.ignoresSuppliedIds = true;
     }
 
     public FluxGraph(final String graphURI) {
@@ -118,8 +126,28 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     }
 
     @Override
+    public void stopTransaction(Conclusion conclusion) {
+        if (conclusion.equals(Conclusion.FAILURE)) {
+            rollback();
+        } else {
+            commit();
+        }
+    }
+
+    @Override
     public void shutdown() {
-        // No actions required
+        commit();
+    }
+
+    @Override
+    public void commit() {
+        transact();
+    }
+
+    @Override
+    public void rollback() {
+        tx.get().add(Util.list(":abort"));
+        transact();
     }
 
     @Override
@@ -162,10 +190,9 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
                                   ":graph.edge/outVertex", outVertex.getId()));
 
             // Update the transaction info of both vertices (moving up their current transaction)
-            addTransactionInfo((TimeAwareVertex)inVertex, (TimeAwareVertex)outVertex);
-
-            // Transact
-            transact();
+            if ((Long)inVertex.getId() >= 0 && (Long)outVertex.getId() >= 0) {
+                addTransactionInfo((TimeAwareVertex)inVertex, (TimeAwareVertex)outVertex);
+            }
 
             // Set the real id on the entity
             edge.id = getRawGraph().entid(edge.uuid);
@@ -180,22 +207,25 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     }
 
     @Override
-    public void removeEdge(final Edge edge) {
-        removeEdge(edge, true);
-    }
-
-    @Override
     public TimeAwareVertex addVertex(final Object id) {
         // Create the new vertex
         FluxVertex vertex = new FluxVertex(this, null);
 
-        // Transact
-        transact();
-
         // Set the real id on the entity
-        vertex.id = getRawGraph().entid(vertex.uuid);
+        vertex.id = dbWithTx().entid(vertex.id);
+
+        // Add to the dirty pile...
+        dirty.get().put(vertex.id, vertex);
 
         return vertex;
+    }
+
+    private void resolveIds(Database after, Object tempids) {
+        for (Map.Entry<Object,FluxElement> entry: dirty.get().entrySet()) {
+            Object newId = Peer.resolveTempid(after, tempids, entry.getKey());
+            entry.getValue().id = newId;
+        }
+        dirty.get().clear();
     }
 
     @Override
@@ -214,8 +244,9 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
 
     @Override
     public Iterable<Vertex> getVertices() {
-        Iterable<Datom> vertices = this.getRawGraph().datoms(Database.AVET, this.GRAPH_ELEMENT_TYPE, this.GRAPH_ELEMENT_TYPE_VERTEX);
-        return new FluxIterable<Vertex>(vertices, this, this.getRawGraph(), Vertex.class);
+        Iterable<Datom> vertices = this.getRawGraph().datoms(Database.AVET, this.GRAPH_ELEMENT_TYPE,
+                this.GRAPH_ELEMENT_TYPE_VERTEX);
+        return new FluxIterable<Vertex>(vertices, this, dbWithTx(), Vertex.class);
     }
 
     @Override
@@ -224,16 +255,11 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     }
 
     @Override
-    public void removeVertex(final Vertex vertex) {
-        removeVertex(vertex, true);
-    }
-
-    @Override
     public Database getRawGraph() {
         if (checkpointTime.get() != null) {
             return getRawGraph(checkpointTime.get());
         }
-        return connection.db();
+        return dbWithTx();
     }
 
     @Override
@@ -241,7 +267,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         Long transaction = null;
         // Retrieve the transactions
         Iterator<List<Object>> tx = (Peer.q("[:find ?tx ?when " +
-                                           ":where [?tx :db/txInstant ?when]]", connection.db().asOf(date))).iterator();
+                                           ":where [?tx :db/txInstant ?when]]", dbWithTx().asOf(date))).iterator();
         while (tx.hasNext()) {
             List<Object> txobject = tx.next();
             Long transactionid = (Long)txobject.get(0);
@@ -330,16 +356,19 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     public void clear() {
         Iterator<Vertex> verticesit = getVertices().iterator();
         while (verticesit.hasNext()) {
-            removeVertex(verticesit.next(), false);
+            removeVertex(verticesit.next());
         }
-        transact();
+    }
+
+    public Database dbWithTx() {
+        return connection.db().with(tx.get());
     }
 
     public Database getRawGraph(Object transaction) {
         if (transaction == null) {
-            return connection.db();
+            return dbWithTx();
         }
-        return connection.db().asOf(transaction);
+        return dbWithTx().asOf(transaction);
     }
 
     public void addToTransaction(Object o) {
@@ -352,7 +381,8 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
             if (transactionTime.get() != null) {
                 tx.get().add(datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant", transactionTime.get()));
             }
-            connection.transact(tx.get()).get();
+            Map map = connection.transact(tx.get()).get();
+            resolveIds((Database)map.get(DB_AFTER), map.get(TEMPIDS));
             tx.get().clear();
         } catch (InterruptedException e) {
             tx.get().clear();
@@ -374,7 +404,8 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         }
     }
 
-    private void removeEdge(final Edge edge, boolean transact) {
+    @Override
+    public void removeEdge(final Edge edge) {
         // Retract the edge element in its totality
         FluxEdge theEdge =  (FluxEdge)edge;
         tx.get().add(Util.list(":db.fn/retractEntity", theEdge.getId()));
@@ -384,34 +415,30 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         FluxVertex outVertex = (FluxVertex)theEdge.getVertex(Direction.OUT);
 
         // Update the transaction info of the edge and both vertices (moving up their current transaction)
-        addTransactionInfo(theEdge, inVertex, outVertex);
-
-        // We need to commit
-        if (transact) {
-            transact();
+        if ((Long)theEdge.getId() >= 0L) {
+            addTransactionInfo(theEdge, inVertex, outVertex);
         }
     }
 
-    private void removeVertex(Vertex vertex, boolean transact) {
+    @Override
+    public void removeVertex(Vertex vertex) {
         // Retrieve all edges associated with this vertex and remove them one bye one
         Iterator<Edge> edgesIt = vertex.getEdges(Direction.BOTH).iterator();
         while (edgesIt.hasNext()) {
-            removeEdge(edgesIt.next(), false);
+            removeEdge(edgesIt.next());
         }
         // Retract the vertex element in its totality
         tx.get().add(Util.list(":db.fn/retractEntity", vertex.getId()));
 
         // Update the transaction info of the vertex
-        addTransactionInfo((FluxVertex)vertex);
-
-        // We need to commit
-        if (transact) {
-            transact();
+        if ((Long)vertex.getId() >= 0L) {
+            addTransactionInfo((FluxVertex)vertex);
         }
     }
 
     // Helper method to check whether the meta model of the graph still needs to be setup
     protected boolean requiresMetaModel() {
+
         return !Peer.q("[:find ?entity " +
                        ":in $ " +
                        ":where [?entity :db/ident :graph.element/type] ] ", getRawGraph()).iterator().hasNext();
@@ -498,6 +525,13 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
                               ":db/fn", Peer.function(Util.map("lang", "java",
                                                       "params", Util.list("db", "id", "lastTransaction"),
                                                       "code", addTransactionInfoCode))));
+
+        // Database function that retrieves the previous transaction and sets the new one
+        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/user"),
+                ":db/ident", ":abort",
+                ":db/fn", Peer.function(Util.map("lang", "java",
+                "params", Util.list("db"),
+                "code", "throw new Exception(\"rolling back transaction\""))));
 
         // Add new graph partition
         tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/db"),

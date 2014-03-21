@@ -74,9 +74,9 @@ public abstract class FluxElement implements TimeAwareElement {
 
     @Override
     public <T> T getProperty(final String key) {
-        if (isDeleted()) {
-            throw new IllegalArgumentException("It is not possible to get properties on a deleted element");
-        }
+//        if (isDeleted()) {
+//            throw new IllegalArgumentException("It is not possible to get properties on a deleted element");
+//        }
         if (!FluxUtil.isReservedKey(key)) {
             Set properties = getDatabase().entity(id).keySet();
             Iterator<Keyword> propertiesit = properties.iterator();
@@ -135,8 +135,10 @@ public abstract class FluxElement implements TimeAwareElement {
             fluxGraph.addToTransaction(Util.map(":db/id", id,
                     key, value));
         }
-        fluxGraph.addTransactionInfo(this);
-        fluxGraph.transact();
+
+        if ((Long)id >= 0L) {
+            fluxGraph.addTransactionInfo(this);
+        }
     }
 
     public Interval getTimeInterval() {
@@ -161,8 +163,9 @@ public abstract class FluxElement implements TimeAwareElement {
                                        FluxUtil.createKey(key, oldvalue.getClass(), this.getClass()), oldvalue));
             }
         }
-        fluxGraph.addTransactionInfo(this);
-        fluxGraph.transact();
+        if ((Long)id >= 0L) {
+            fluxGraph.addTransactionInfo(this);
+        }
         return (T)oldvalue;
     }
 
@@ -191,9 +194,9 @@ public abstract class FluxElement implements TimeAwareElement {
         if (!isCurrentVersion()) {
             throw new IllegalArgumentException("It is not possible to set a property on a non-current version of the element");
         }
-        if (isDeleted()) {
-            throw new IllegalArgumentException("It is not possible to set a property on a deleted element");
-        }
+//        if (isDeleted()) {
+//            throw new IllegalArgumentException("It is not possible to set a property on a deleted element");
+//        }
     }
 
     // Creates a collection containing the set of datomic facts describing this entity
