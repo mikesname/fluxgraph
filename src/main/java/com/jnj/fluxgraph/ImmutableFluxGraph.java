@@ -24,7 +24,7 @@ public class ImmutableFluxGraph extends FluxGraph {
             setupAdditionalMetaModel();
             // Add the various fact that together define the difference graph
             for (Object differenceFact : differenceFacts) {
-                addToTransaction(differenceFact);
+                addToTransaction("graph", differenceFact);
             }
             transact();
         } catch (ExecutionException e) {
@@ -79,7 +79,7 @@ public class ImmutableFluxGraph extends FluxGraph {
         // Add the various custom attributes
         while (schemaIds.hasNext())  {
             Entity t = originGraph.getRawGraph().entity(schemaIds.next().get(0));
-            addToTransaction(Util.map(":db/id", Peer.tempid(":db.part/db"),
+            addToTransaction("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
                                       ":db/ident", t.get(":db/ident"),
                                       ":db/valueType", t.get(":db/valueType"),
                                       ":db/cardinality", t.get(":db/cardinality"),
@@ -87,12 +87,12 @@ public class ImmutableFluxGraph extends FluxGraph {
         }
 
         // Add the original id attribute types for both vertex and edge
-        addToTransaction(Util.map(":db/id", Peer.tempid(":db.part/db"),
+        addToTransaction("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
                 ":db/ident", ":original$id.long.vertex",
                 ":db/valueType", ":db.type/long",
                 ":db/cardinality", ":db/cardinality",
                 ":db.install/_attribute", ":db.part/db"));
-        addToTransaction(Util.map(":db/id", Peer.tempid(":db.part/db"),
+        addToTransaction("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
                 ":db/ident", ":original$id.long.edge",
                 ":db/valueType", ":db.type/long",
                 ":db/cardinality", ":db/cardinality",

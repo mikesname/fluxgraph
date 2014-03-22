@@ -68,7 +68,8 @@ public class FluxIndex<T extends Element> implements Index<T> {
         }
         if (matched && FluxUtil.existingAttributeDefinition(attribute, graph)) {
             if (this.getIndexClass().isAssignableFrom(FluxVertex.class)) {
-                return new FluxIterable(getElements(attribute, value, Keyword.intern("graph.element.type/vertex"), getDatabase()), graph, database, Vertex.class);
+                return new FluxIterable(getElements(attribute, value, Keyword.intern("graph.element.type/vertex"),
+                        getDatabase()), graph, database, Vertex.class);
             }
             if (this.getIndexClass().isAssignableFrom(FluxEdge.class)) {
                 return new FluxIterable(getElements(attribute, value, Keyword.intern("graph.element.type/edge"), getDatabase()), graph, database, Edge.class);

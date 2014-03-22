@@ -111,29 +111,28 @@ public abstract class FluxElement implements TimeAwareElement {
             if (getProperty(key) == null) {
                 // We first need to create the new attribute on the fly
                 FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
-                fluxGraph.addToTransaction(Util.map(":db/id", id,
+                fluxGraph.addToTransaction(id, Util.map(":db/id", id,
                         FluxUtil.createKey(key, value.getClass(), this.getClass()), value));
             }
             else {
                 // Value types match, just perform an update
                 if (getProperty(key).getClass().equals(value.getClass())) {
-                    fluxGraph.addToTransaction(Util.map(":db/id", id,
+                    fluxGraph.addToTransaction(id, Util.map(":db/id", id,
                             FluxUtil.createKey(key, value.getClass(), this.getClass()), value));
                 }
                 // Value types do not match. Retract original fact and add new one
                 else {
                     FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
-                    fluxGraph.addToTransaction(Util.list(":db/retract", id,
+                    fluxGraph.addToTransaction(id, Util.list(":db/retract", id,
                             FluxUtil.createKey(key, value.getClass(), this.getClass()), getProperty(key)));
-                    fluxGraph.addToTransaction(Util.map(":db/id", id,
+                    fluxGraph.addToTransaction(id, Util.map(":db/id", id,
                             FluxUtil.createKey(key, value.getClass(), this.getClass()), value));
                 }
             }
         }
         // A datomic graph specific property
         else {
-            fluxGraph.addToTransaction(Util.map(":db/id", id,
-                    key, value));
+            fluxGraph.addToTransaction(id, Util.map(":db/id", id, key, value));
         }
 
         if ((Long)id >= 0L) {
@@ -159,7 +158,7 @@ public abstract class FluxElement implements TimeAwareElement {
         Object oldvalue = getProperty(key);
         if (oldvalue != null) {
             if (!FluxUtil.isReservedKey(key)) {
-                fluxGraph.addToTransaction(Util.list(":db/retract", id,
+                fluxGraph.addToTransaction(id, Util.list(":db/retract", id,
                                        FluxUtil.createKey(key, oldvalue.getClass(), this.getClass()), oldvalue));
             }
         }

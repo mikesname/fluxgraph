@@ -15,7 +15,7 @@ public class FluxEdge extends FluxElement implements TimeAwareEdge {
 
     public FluxEdge(final FluxGraph fluxGraph, final Database database) {
         super(fluxGraph, database);
-        fluxGraph.addToTransaction(Util.map(":db/id", id,
+        fluxGraph.addToTransaction(fluxGraph.dbWithTx().entid(id), Util.map(":db/id", id,
                                                ":graph.element/type", ":graph.element.type/edge",
                                                ":db/ident", uuid));
     }

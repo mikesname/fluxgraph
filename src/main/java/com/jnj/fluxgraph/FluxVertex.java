@@ -16,7 +16,7 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
 
     protected FluxVertex(final FluxGraph fluxGraph, final Database database) {
         super(fluxGraph, database);
-        fluxGraph.addToTransaction(Util.map(":db/id", id,
+        fluxGraph.addToTransaction(fluxGraph.dbWithTx().entid(id), Util.map(":db/id", id,
                                               ":graph.element/type", ":graph.element.type/vertex",
                                               ":db/ident", uuid));
     }

@@ -1,6 +1,10 @@
 package com.jnj.fluxgraph;
 
 import clojure.lang.ExceptionInfo;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Multimaps;
 import com.tinkerpop.blueprints.*;
 import com.tinkerpop.blueprints.util.DefaultGraphQuery;
 import com.tinkerpop.blueprints.util.ExceptionFactory;
@@ -33,9 +37,9 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     private final FluxIndex vertexIndex;
     private final FluxIndex edgeIndex;
 
-    protected final ThreadLocal<List> tx = new ThreadLocal<List>() {
-        protected List initialValue() {
-            return new ArrayList();
+    protected final ThreadLocal<Multimap<Object,Object>> tx = new ThreadLocal<Multimap<Object,Object>>() {
+        protected Multimap<Object,Object> initialValue() {
+            return ArrayListMultimap.create();
         }
     };
     protected final ThreadLocal<Long> checkpointTime = new ThreadLocal<Long>() {
@@ -146,7 +150,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
 
     @Override
     public void rollback() {
-        tx.get().add(Util.list(":abort"));
+        tx.get().put("graph", Util.list(":abort"));
         transact();
     }
 
@@ -184,10 +188,10 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         // Create the new edge
         try {
             final FluxEdge edge = new FluxEdge(this, null);
-            tx.get().add(Util.map(":db/id", edge.id,
-                                  ":graph.edge/label", label,
-                                  ":graph.edge/inVertex", inVertex.getId(),
-                                  ":graph.edge/outVertex", outVertex.getId()));
+            tx.get().put(edge.id, Util.map(":db/id", edge.id,
+                    ":graph.edge/label", label,
+                    ":graph.edge/inVertex", inVertex.getId(),
+                    ":graph.edge/outVertex", outVertex.getId()));
 
             // Update the transaction info of both vertices (moving up their current transaction)
             if ((Long)inVertex.getId() >= 0 && (Long)outVertex.getId() >= 0) {
@@ -361,7 +365,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     }
 
     public Database dbWithTx() {
-        return connection.db().with(tx.get());
+        return connection.db().with(Lists.newArrayList(tx.get().values()));
     }
 
     public Database getRawGraph(Object transaction) {
@@ -371,17 +375,18 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         return dbWithTx().asOf(transaction);
     }
 
-    public void addToTransaction(Object o) {
-        tx.get().add(o);
+    public void addToTransaction(Object id, Object o) {
+        tx.get().put(id, o);
     }
 
     public void transact() {
         try {
             // We are adding a fact which dates back to the past. Add the required meta data on the transaction
             if (transactionTime.get() != null) {
-                tx.get().add(datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant", transactionTime.get()));
+                tx.get().put("graph", datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant",
+                        transactionTime.get()));
             }
-            Map map = connection.transact(tx.get()).get();
+            Map map = connection.transact(Lists.newArrayList(tx.get().values())).get();
             resolveIds((Database)map.get(DB_AFTER), map.get(TEMPIDS));
             tx.get().clear();
         } catch (InterruptedException e) {
@@ -400,7 +405,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     // Ensures that add-transaction-info database function is called during the transaction execution. This will setup the linked list of transactions
     public void addTransactionInfo(TimeAwareElement... elements) {
         for (TimeAwareElement element : elements) {
-            tx.get().add(Util.list(":add-transaction-info", element.getId(), element.getTimeId()));
+            tx.get().put(element.getId(), Util.list(":add-transaction-info", element.getId(), element.getTimeId()));
         }
     }
 
@@ -408,7 +413,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     public void removeEdge(final Edge edge) {
         // Retract the edge element in its totality
         FluxEdge theEdge =  (FluxEdge)edge;
-        tx.get().add(Util.list(":db.fn/retractEntity", theEdge.getId()));
+        tx.get().put(theEdge.getId(), Util.list(":db.fn/retractEntity", theEdge.getId()));
 
         // Get the in and out vertex (as their version also needs to be updated)
         FluxVertex inVertex = (FluxVertex)theEdge.getVertex(Direction.IN);
@@ -427,12 +432,18 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         while (edgesIt.hasNext()) {
             removeEdge(edgesIt.next());
         }
-        // Retract the vertex element in its totality
-        tx.get().add(Util.list(":db.fn/retractEntity", vertex.getId()));
 
+        // Retract the vertex element in its totality
         // Update the transaction info of the vertex
         if ((Long)vertex.getId() >= 0L) {
+            tx.get().put(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.getId()));
             addTransactionInfo((FluxVertex)vertex);
+        } else {
+            // if we haven't created the item yet, just remove its operations
+            // from the TX queue...
+            System.out.println("Removing uncommitted item from queue...");
+            //System.out.println(tx.get());
+            tx.get().removeAll(vertex.getId());
         }
     }
 
@@ -448,98 +459,98 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     protected void setupMetaModel() throws ExecutionException, InterruptedException {
 
         // The graph element type attribute
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                              ":db/ident", ":graph.element/type",
-                              ":db/valueType", ":db.type/ref",
-                              ":db/cardinality", ":db.cardinality/one",
-                              ":db/doc", "A graph element type",
-                              ":db/index", true,
-                              ":db.install/_attribute", ":db.part/db"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+                ":db/ident", ":graph.element/type",
+                ":db/valueType", ":db.type/ref",
+                ":db/cardinality", ":db.cardinality/one",
+                ":db/doc", "A graph element type",
+                ":db/index", true,
+                ":db.install/_attribute", ":db.part/db"));
 
         // The graph vertex element type
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/user"),
-                              ":db/ident", ":graph.element.type/vertex"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/user"),
+                ":db/ident", ":graph.element.type/vertex"));
 
         // The graph edge element type
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/user"),
-                              ":db/ident", ":graph.element.type/edge"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/user"),
+                ":db/ident", ":graph.element.type/edge"));
 
         // The incoming vertex of an edge attribute
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                              ":db/ident", ":graph.edge/inVertex",
-                              ":db/valueType", ":db.type/ref",
-                              ":db/cardinality", ":db.cardinality/one",
-                              ":db/doc", "The incoming vertex of an edge",
-                              ":db/index", true,
-                              ":db.install/_attribute", ":db.part/db"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+                ":db/ident", ":graph.edge/inVertex",
+                ":db/valueType", ":db.type/ref",
+                ":db/cardinality", ":db.cardinality/one",
+                ":db/doc", "The incoming vertex of an edge",
+                ":db/index", true,
+                ":db.install/_attribute", ":db.part/db"));
 
         // The outgoing vertex of an edge attribute
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                              ":db/ident", ":graph.edge/outVertex",
-                              ":db/valueType", ":db.type/ref",
-                              ":db/cardinality", ":db.cardinality/one",
-                              ":db/doc", "The outgoing vertex of an edge",
-                              ":db/index", true,
-                              ":db.install/_attribute", ":db.part/db"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+                ":db/ident", ":graph.edge/outVertex",
+                ":db/valueType", ":db.type/ref",
+                ":db/cardinality", ":db.cardinality/one",
+                ":db/doc", "The outgoing vertex of an edge",
+                ":db/index", true,
+                ":db.install/_attribute", ":db.part/db"));
 
         // The outgoing vertex of an edge attribute
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                              ":db/ident", ":graph.edge/label",
-                              ":db/valueType", ":db.type/string",
-                              ":db/cardinality", ":db.cardinality/one",
-                              ":db/doc", "The label of a vertex",
-                              ":db/index", true,
-                              ":db.install/_attribute", ":db.part/db"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+                ":db/ident", ":graph.edge/label",
+                ":db/valueType", ":db.type/string",
+                ":db/cardinality", ":db.cardinality/one",
+                ":db/doc", "The label of a vertex",
+                ":db/index", true,
+                ":db.install/_attribute", ":db.part/db"));
 
         // The previous transaction through which the entity (vertex or edge) was changed
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                              ":db/ident", ":graph.element/previousTransaction",
-                              ":db/valueType", ":db.type/ref",
-                              ":db/cardinality", ":db.cardinality/many",
-                              ":db/doc", "The previous transactions of the elements that wer changed",
-                              ":db/index", true,
-                              ":db.install/_attribute", ":db.part/db"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+                ":db/ident", ":graph.element/previousTransaction",
+                ":db/valueType", ":db.type/ref",
+                ":db/cardinality", ":db.cardinality/many",
+                ":db/doc", "The previous transactions of the elements that wer changed",
+                ":db/index", true,
+                ":db.install/_attribute", ":db.part/db"));
 
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                              ":db/ident", ":graph.element/previousTransaction/elementId",
-                              ":db/valueType", ":db.type/ref",
-                              ":db/cardinality", ":db.cardinality/one",
-                              ":db/doc", "The element id of the entity that was part of the previous transaction",
-                              ":db/index", true,
-                              ":db.install/_attribute", ":db.part/db"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+                ":db/ident", ":graph.element/previousTransaction/elementId",
+                ":db/valueType", ":db.type/ref",
+                ":db/cardinality", ":db.cardinality/one",
+                ":db/doc", "The element id of the entity that was part of the previous transaction",
+                ":db/index", true,
+                ":db.install/_attribute", ":db.part/db"));
 
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                              ":db/ident", ":graph.element/previousTransaction/transactionId",
-                              ":db/valueType", ":db.type/ref",
-                              ":db/cardinality", ":db.cardinality/one",
-                              ":db/doc", "The transaction id for the entity that was part of the previous transaction",
-                              ":db/index", true,
-                              ":db.install/_attribute", ":db.part/db"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+                ":db/ident", ":graph.element/previousTransaction/transactionId",
+                ":db/valueType", ":db.type/ref",
+                ":db/cardinality", ":db.cardinality/one",
+                ":db/doc", "The transaction id for the entity that was part of the previous transaction",
+                ":db/index", true,
+                ":db.install/_attribute", ":db.part/db"));
 
         String addTransactionInfoCode = "Object transactInfoId = tempid(\":db.part/user\");\n" +
                                         "return list(list(\":db/add\", transactInfoId, \":graph.element/previousTransaction/transactionId\", lastTransaction), list(\":db/add\", transactInfoId, \":graph.element/previousTransaction/elementId\", id), list(\":db/add\", tempid(\":db.part/tx\"), \":graph.element/previousTransaction\", transactInfoId));\n";
 
         // Database function that retrieves the previous transaction and sets the new one
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/user"),
-                              ":db/ident", ":add-transaction-info",
-                              ":db/fn", Peer.function(Util.map("lang", "java",
-                                                      "params", Util.list("db", "id", "lastTransaction"),
-                                                      "code", addTransactionInfoCode))));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/user"),
+                ":db/ident", ":add-transaction-info",
+                ":db/fn", Peer.function(Util.map("lang", "java",
+                "params", Util.list("db", "id", "lastTransaction"),
+                "code", addTransactionInfoCode))));
 
         // Database function that retrieves the previous transaction and sets the new one
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/user"),
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/user"),
                 ":db/ident", ":abort",
                 ":db/fn", Peer.function(Util.map("lang", "java",
                 "params", Util.list("db"),
                 "code", "throw new Exception(\"rolling back transaction\""))));
 
         // Add new graph partition
-        tx.get().add(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                              ":db/ident", ":graph",
-                              ":db.install/_partition", ":db.part/db"));
+        tx.get().put("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+                ":db/ident", ":graph",
+                ":db.install/_partition", ":db.part/db"));
 
-        tx.get().add(datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant", new Date(0)));
-        connection.transact(tx.get()).get();
+        tx.get().put("graph", datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant", new Date(0)));
+        connection.transact(Lists.newArrayList(tx.get().values())).get();
         tx.get().clear();
     }
 
