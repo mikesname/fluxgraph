@@ -61,10 +61,7 @@ public abstract class FluxElement implements TimeAwareElement {
             throw new IllegalArgumentException("It is not possible to get properties on a deleted element");
         }
         Set<String> finalproperties = new HashSet<String>();
-        Set properties = getDatabase().entity(id).keySet();
-        Iterator<Keyword> propertiesit = properties.iterator();
-        while (propertiesit.hasNext()) {
-            Keyword property = propertiesit.next();
+        for(String property : getDatabase().entity(id).keySet()) {
             if (!FluxUtil.isReservedKey(property.toString())) {
                 finalproperties.add(FluxUtil.getPropertyName(property));
             }
@@ -78,11 +75,8 @@ public abstract class FluxElement implements TimeAwareElement {
 //            throw new IllegalArgumentException("It is not possible to get properties on a deleted element");
 //        }
         if (!FluxUtil.isReservedKey(key)) {
-            Set properties = getDatabase().entity(id).keySet();
-            Iterator<Keyword> propertiesit = properties.iterator();
             // We need to iterate, as we don't know the exact type (although we ensured that only one attribute will have that name)
-            while (propertiesit.hasNext()) {
-                Keyword property = propertiesit.next();
+            for(String property : getDatabase().entity(id).keySet()) {
                 String propertyname = FluxUtil.getPropertyName(property);
                 if (key.equals(propertyname)) {
                     return (T)getDatabase().entity(id).get(property);

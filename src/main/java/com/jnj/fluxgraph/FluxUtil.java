@@ -39,9 +39,9 @@ public class FluxUtil {
     }
 
     // Retrieve the original name of a property
-    public static String getPropertyName(final Keyword property) {
-        if (property.toString().contains(".")) {
-            return property.toString().substring(1, property.toString().indexOf(".")).replace("$","_");
+    public static String getPropertyName(final String property) {
+        if (property.contains(".")) {
+            return property.substring(1, property.indexOf(".")).replace("$","_");
         }
         return null;
     }
@@ -58,17 +58,19 @@ public class FluxUtil {
     public static void createAttributeDefinition(final String key, final Class valueClazz, final Class elementClazz, FluxGraph graph) {
         if (!existingAttributeDefinition(key, valueClazz, elementClazz, graph)) {
             try {
+                Keyword ident = createKey(key, valueClazz, elementClazz);
+                String valueType = mapJavaTypeToDatomicType(valueClazz);
                 if (graph.getTransactionTime() == null) {
                     graph.getConnection().transact(Util.list(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                                                                      ":db/ident", createKey(key, valueClazz, elementClazz),
-                                                                      ":db/valueType", mapJavaTypeToDatomicType(valueClazz),
+                                                                      ":db/ident", ident,
+                                                                      ":db/valueType", valueType,
                                                                       ":db/cardinality", ":db.cardinality/one",
                                                                       ":db.install/_attribute", ":db.part/db"))).get();
                 }
                 else {
                     graph.getConnection().transact(Util.list(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                                                                      ":db/ident", createKey(key, valueClazz, elementClazz),
-                                                                      ":db/valueType", mapJavaTypeToDatomicType(valueClazz),
+                                                                      ":db/ident", ident,
+                                                                      ":db/valueType", valueType,
                                                                       ":db/cardinality", ":db.cardinality/one",
                                                                       ":db.install/_attribute", ":db.part/db"), datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant", graph.getTransactionTime()))).get();
                 }
@@ -142,7 +144,7 @@ public class FluxUtil {
         for(List<Object> indexedAttribute : indexedAttributes) {
             String elementClazzName = elementClazz.getSimpleName();
             if (indexedAttribute.get(0).toString().endsWith("." + elementClazzName.toLowerCase())) {
-                results.add(getPropertyName((Keyword)indexedAttribute.get(0)));
+                results.add(getPropertyName(indexedAttribute.get(0).toString()));
             }
         }
         return results;

@@ -1,0 +1,16 @@
+
+[
+
+;; Our test graph is going to be v[name:Marko]-[:knows]->v[name:Stephen]
+
+;; First, we need to create the definitions for property type 'name' on vertices.
+;; NB: These have to be loaded on a single transaction prior to the data that uses them.
+
+{
+    :db/id #db/id[:db.part/db -1]
+    :db/ident :name.string.vertex
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db/doc "A person's name"
+    :db.install/_attribute :db.part/db }]
+

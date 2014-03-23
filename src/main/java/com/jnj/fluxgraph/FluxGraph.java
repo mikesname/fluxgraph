@@ -13,6 +13,7 @@ import static datomic.Connection.TEMPIDS;
 import static datomic.Connection.DB_AFTER;
 import datomic.*;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 
@@ -21,7 +22,7 @@ import java.util.concurrent.ExecutionException;
  *
  * @author Davy Suvee (http://datablend.be)
  */
-public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAwareGraph, TransactionalGraph {
+public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, TransactionalGraph {
 
     private final String graphURI;
     private final Connection connection;
@@ -89,9 +90,9 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         FEATURES.supportsStringProperty = true;
 
         FEATURES.isWrapper = true;
-        FEATURES.supportsKeyIndices = true;
-        FEATURES.supportsVertexKeyIndex = true;
-        FEATURES.supportsEdgeKeyIndex = true;
+        //FEATURES.supportsKeyIndices = true;
+        //FEATURES.supportsVertexKeyIndex = true;
+        //FEATURES.supportsEdgeKeyIndex = true;
         FEATURES.supportsThreadedTransactions = false;
         FEATURES.ignoresSuppliedIds = true;
     }
@@ -329,7 +330,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         return StringFactory.graphString(this, graphURI);
     }
 
-    @Override
+    //@Override
     public <T extends Element> void dropKeyIndex(String key, Class<T> elementClass) {
         if (elementClass == null) {
             throw ExceptionFactory.classForElementCannotBeNull();
@@ -337,7 +338,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         FluxUtil.removeAttributeIndex(key, elementClass, this);
     }
 
-    @Override
+    //@Override
     public <T extends Element> void createKeyIndex(String key, Class<T> elementClass, Parameter... parameter) {
         if (elementClass == null) {
             throw ExceptionFactory.classForElementCannotBeNull();
@@ -345,7 +346,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
         FluxUtil.createAttributeIndex(key, elementClass, this);
     }
 
-    @Override
+    //@Override
     public <T extends Element> Set<String> getIndexedKeys(Class<T> elementClass) {
         if (elementClass == null) {
             throw ExceptionFactory.classForElementCannotBeNull();
@@ -365,7 +366,7 @@ public class FluxGraph implements MetaGraph<Database>, KeyIndexableGraph, TimeAw
     }
 
     public Database dbWithTx() {
-        return connection.db().with(Lists.newArrayList(tx.get().values()));
+        return (Database)connection.db().with(Lists.newArrayList(tx.get().values())).get(DB_AFTER);
     }
 
     public Database getRawGraph(Object transaction) {

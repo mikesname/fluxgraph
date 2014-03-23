@@ -1,0 +1,105 @@
+[
+
+    ;; graph schema
+
+    {:db/id #db/id[:db.part/db]
+     :db/ident :graph.element/type
+     :db/valueType :db.type/ref
+     :db/cardinality :db.cardinality/one
+     :db/doc "A graph element type"
+     :db/index true
+     :db.install/_attribute :db.part/db }
+
+     ;; External element id
+    {:db/id #db/id[:db.part/db]
+     :db/ident  :graph.element/id
+     :db/valueType :db.type/uuid
+     :db/cardinality :db.cardinality/one
+     :db/doc "The external ID of an element"
+     :db/unique :db.unique/identity
+     :db.install/_attribute :db.part/db }
+
+     ;; The graph vertex element type
+    {:db/id #db/id[:db.part/user]
+     :db/ident :graph.element.type/vertex }
+
+     ;; The graph edge element type
+    {:db/id #db/id[:db.part/user]
+     :db/ident :graph.element.type/edge }
+
+     ;; The incoming vertex of an edge attribute
+    {:db/id #db/id[:db.part/db]
+     :db/ident :graph.edge/inVertex
+     :db/valueType  :db.type/ref
+     :db/cardinality :db.cardinality/one
+     :db/doc "The incoming vertex of an edge"
+     :db/index true
+     :db.install/_attribute :db.part/db }
+
+     ;; The outgoing vertex of an edge attribute
+    {:db/id #db/id[:db.part/db]
+     :db/ident :graph.edge/outVertex
+     :db/valueType :db.type/ref
+     :db/cardinality :db.cardinality/one
+     :db/doc "The outgoing vertex of an edge"
+     :db/index true,
+     :db.install/_attribute :db.part/db }
+
+     ;; The outgoing vertex of an edge attribute
+    {:db/id #db/id[:db.part/db]
+     :db/ident  :graph.edge/label
+     :db/valueType :db.type/string
+     :db/cardinality :db.cardinality/one
+     :db/doc "The label of a vertex"
+     :db/index true
+     :db.install/_attribute :db.part/db }
+
+     ;; The previous transaction through which the entity (vertex or edge) was changed
+    {:db/id #db/id[:db.part/db]
+     :db/ident :graph.element/previousTransaction
+     :db/valueType :db.type/ref
+     :db/cardinality :db.cardinality/many
+     :db/doc "The previous transactions of the elements that wer changed"
+     :db/index true
+     :db.install/_attribute :db.part/db }
+
+     {:db/id #db/id[:db.part/db]
+      :db/ident :graph.element/previousTransaction/elementId
+      :db/valueType :db.type/ref
+      :db/cardinality :db.cardinality/one
+      :db/doc "The element id of the entity that was part of the previous transaction"
+      :db/index true
+      :db.install/_attribute :db.part/db }
+
+     {:db/id #db/id[:db.part/db]
+      :db/ident :graph.element/previousTransaction/transactionId
+      :db/valueType :db.type/ref
+      :db/cardinality :db.cardinality/one
+      :db/doc "The transaction id for the entity that was part of the previous transaction"
+      :db/index true
+      :db.install/_attribute :db.part/db }
+
+    ;; Database function that retrieves the previous transaction and sets the new one
+    { :db/id #db/id[:db.part/user]
+         :db/ident :add-transaction-info
+         :db/fn #db/fn {
+                 :lang "clojure"
+                 :params [db id lastTransaction]
+                 :code "(let [transactionInfoId (tempid :db.part/user)] 
+                    [:db/add transactInfoId :graph.element/previousTransaction/transactionId lastTransaction]
+                    [:db/add transactInfoId :graph.element/previousTransaction/elementId id]
+                    [:db/add (tempid :db.part/tx) :graph.element/previousTransaction transactInfoId ])" }}
+
+    ;; Database function to abort the current TX
+    { :db/id #db/id[:db.part/user]
+         :db/ident :rollback
+         :db/fn #db/fn {
+                 :lang "clojure"
+                 :params [db]
+                 :code "(throw (Exception. \"rolling back\"))" }}
+
+    ;; Add new graph partition
+   {:db/id #db/id[:db.part/db]
+    :db/ident :graph
+    :db.install/_partition :db.part/db }
+]
