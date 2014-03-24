@@ -4,10 +4,7 @@ import com.tinkerpop.blueprints.*;
 import datomic.Database;
 import datomic.Datom;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 /**
  * @author Davy Suvee (http://datablend.be)
@@ -67,9 +64,9 @@ public class FluxIterable<T extends Element> implements CloseableIterable<T> {
             Object object = getNext();
             T ret = null;
             if (clazz == Vertex.class) {
-                ret = (T) new FluxVertex(graph, database, object);
+                ret = (T) new FluxVertex(graph, database, UUID.randomUUID(), object);
             } else if (clazz == Edge.class) {
-                ret = (T) new FluxEdge(graph, database, object);
+                ret = (T) new FluxEdge(graph, database, UUID.randomUUID(), object);
             } else {
                 throw new IllegalStateException();
             }

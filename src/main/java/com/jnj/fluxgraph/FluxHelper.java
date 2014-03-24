@@ -219,20 +219,22 @@ public final class FluxHelper {
      * @param labels    The label(s)
      * @return An iterable of ID/Uuid edge pairs
      */
-    public Iterable<List<Object>> getEdges(Object vertexId, Direction direction, String... labels) {
+    public Iterable<List<Object>> getEdges(UUID vertexId, Direction direction, String... labels) {
         if (labels.length > 0) {
             switch (direction) {
                 case OUT:
                     return Peer.q("[:find ?e ?uuid ?dir ?label" +
-                            " :in $ ?v [?label ...] ?dir" +
-                            " :where [?e :graph.edge/outVertex ?v]" +
+                            " :in $ ?vuuid [?label ...] ?dir" +
+                            " :where [?v :graph.element/id ?vuuid] " +
+                            " [?e :graph.edge/outVertex ?v]" +
                             " [?e :graph.edge/label ?label]" +
                             " [?e :graph.element/id ?uuid] ]",
                             getDatabase(), vertexId, labels, OUT_DIRECTION);
                 case IN:
                     return Peer.q("[:find ?e ?uuid ?dir ?label" +
-                            " :in $ ?v [?label ...] ?dir" +
-                            " :where [?e :graph.edge/inVertex ?v] " +
+                            " :in $ ?vuuid [?label ...] ?dir" +
+                            " :where [?v :graph.element/id ?vuuid] " +
+                            " [?e :graph.edge/inVertex ?v] " +
                             " [?e :graph.edge/label ?label]" +
                             " [?e :graph.element/id ?uuid] ]",
                             getDatabase(), vertexId, labels, IN_DIRECTION);
@@ -246,15 +248,17 @@ public final class FluxHelper {
             switch (direction) {
                 case OUT:
                     return Peer.q("[:find ?e ?uuid ?dir ?label" +
-                            " :in $ ?v ?dir" +
-                            " :where [?e :graph.edge/outVertex ?v] " +
+                            " :in $ ?vuuid ?dir" +
+                            " :where [?v :graph.element/id ?vuuid] " +
+                            " [?e :graph.edge/outVertex ?v] " +
                             " [?e :graph.edge/label ?label]" +
                             " [?e :graph.element/id ?uuid] ]",
                             getDatabase(), vertexId, OUT_DIRECTION);
                 case IN:
                     return Peer.q("[:find ?e ?uuid ?dir ?label" +
-                            " :in $ ?v ?dir" +
-                            " :where [?e :graph.edge/inVertex ?v] " +
+                            " :in $ ?vuuid ?dir" +
+                            " :where [?v :graph.element/id ?vuuid] " +
+                            " [?e :graph.edge/inVertex ?v] " +
                             " [?e :graph.edge/label ?label]" +
                             " [?e :graph.element/id ?uuid] ]",
                             getDatabase(), vertexId, IN_DIRECTION);
@@ -333,7 +337,7 @@ public final class FluxHelper {
      * @param edge An edge ID
      * @return An ID/UUID pair
      */
-    public List<Object> getOutVertex(Object edge) {
+    public List<Object> getOutVertex(UUID edge) {
         return getEdgeVertex(edge, OUT_VERTEX);
 
     }
@@ -344,15 +348,17 @@ public final class FluxHelper {
      * @param edge An edge ID
      * @return An ID/UUID pair
      */
-    public List<Object> getInVertex(Object edge) {
+    public List<Object> getInVertex(UUID edge) {
         return getEdgeVertex(edge, IN_VERTEX);
 
     }
 
-    private List<Object> getEdgeVertex(Object edge, Keyword direction) {
-        return Peer.q("[:find ?v ?uuid :in $ ?t ?e :where [?e ?t ?v] " +
+    private List<Object> getEdgeVertex(UUID edge, Keyword direction) {
+        return Peer.q("[:find ?v ?uuid :in $ ?euuid ?d :where " +
+                "[?e :graph.element/id ?euuid ] " +
+                "[?e ?d ?v] " +
                 "[?v :graph.element/id ?uuid]]",
-                getDatabase(), direction, edge).iterator().next();
+                getDatabase(), edge, direction).iterator().next();
     }
 
     /**
@@ -366,7 +372,7 @@ public final class FluxHelper {
      */
     public Object getProperty(Object id, Class elementClass, String key, Class valueClass) {
         Iterator<List<Object>> iterator = Peer.q("[:find ?p :in $ ?e ?k :where [?e ?k ?p]]",
-                getDatabase(), id, FluxUtil.createKey(key, valueClass, elementClass)).iterator();
+                getDatabase(), getDatabase().entid(id), FluxUtil.createKey(key, valueClass, elementClass)).iterator();
         return iterator.hasNext() ? iterator.next().get(0) : null;
     }
 

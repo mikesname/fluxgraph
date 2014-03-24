@@ -23,9 +23,9 @@ public class ImmutableFluxGraph extends FluxGraph {
         try {
             setupAdditionalMetaModel();
             // Add the various fact that together define the difference graph
-            for (Object differenceFact : differenceFacts) {
-                addToTransaction("graph", differenceFact);
-            }
+//            for (Object differenceFact : differenceFacts) {
+//                addToTransaction("graph", differenceFact);
+//            }
             transact();
         } catch (ExecutionException e) {
             throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE);
@@ -77,26 +77,26 @@ public class ImmutableFluxGraph extends FluxGraph {
                                                           "[?id ?attribute ?value] ]", originGraph.getRawGraph().since(new Date(1))).iterator();
 
         // Add the various custom attributes
-        while (schemaIds.hasNext())  {
-            Entity t = originGraph.getRawGraph().entity(schemaIds.next().get(0));
-            addToTransaction("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
-                                      ":db/ident", t.get(":db/ident"),
-                                      ":db/valueType", t.get(":db/valueType"),
-                                      ":db/cardinality", t.get(":db/cardinality"),
-                                      ":db.install/_attribute", ":db.part/db"));
-        }
-
-        // Add the original id attribute types for both vertex and edge
-        addToTransaction("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
-                ":db/ident", ":original$id.long.vertex",
-                ":db/valueType", ":db.type/long",
-                ":db/cardinality", ":db/cardinality",
-                ":db.install/_attribute", ":db.part/db"));
-        addToTransaction("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
-                ":db/ident", ":original$id.long.edge",
-                ":db/valueType", ":db.type/long",
-                ":db/cardinality", ":db/cardinality",
-                ":db.install/_attribute", ":db.part/db"));
+//        while (schemaIds.hasNext())  {
+//            Entity t = originGraph.getRawGraph().entity(schemaIds.next().get(0));
+//            addToTransaction("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+//                                      ":db/ident", t.get(":db/ident"),
+//                                      ":db/valueType", t.get(":db/valueType"),
+//                                      ":db/cardinality", t.get(":db/cardinality"),
+//                                      ":db.install/_attribute", ":db.part/db"));
+//        }
+//
+//        // Add the original id attribute types for both vertex and edge
+//        addToTransaction("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+//                ":db/ident", ":original$id.long.vertex",
+//                ":db/valueType", ":db.type/long",
+//                ":db/cardinality", ":db/cardinality",
+//                ":db.install/_attribute", ":db.part/db"));
+//        addToTransaction("graph", Util.map(":db/id", Peer.tempid(":db.part/db"),
+//                ":db/ident", ":original$id.long.edge",
+//                ":db/valueType", ":db.type/long",
+//                ":db/cardinality", ":db/cardinality",
+//                ":db.install/_attribute", ":db.part/db"));
 
         // Transact it
         transact();

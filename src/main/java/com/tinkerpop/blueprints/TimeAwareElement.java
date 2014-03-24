@@ -2,6 +2,8 @@ package com.tinkerpop.blueprints;
 
 import org.joda.time.Interval;
 
+import java.util.UUID;
+
 /**
  * A TimeAwareElement is the base interface for time-aware elements (i.e. time-aware vertices and edges).
  * It extends the base blueprints Element interface with time-based operations
@@ -9,6 +11,14 @@ import org.joda.time.Interval;
  * @author Davy Suvee (http://datablend.be)
  */
 public interface TimeAwareElement extends Element {
+
+    @Override
+    /**
+     * Get the globally-unique id of this object.
+     *
+     * @return A UUID
+     */
+    public UUID getId();
 
     /**
      * An identifier that specifies the time-scope in which it exists

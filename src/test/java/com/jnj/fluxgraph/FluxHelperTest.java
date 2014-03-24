@@ -147,8 +147,7 @@ public class FluxHelperTest {
     public void testGetOutVertex() throws Exception {
         loadTestData();
         Object marko = helper.idFromUuid(MARKO_ID);
-        Object edge = helper.idFromUuid(EDGE_ID);
-        List<Object> outVertex = helper.getOutVertex(edge);
+        List<Object> outVertex = helper.getOutVertex(EDGE_ID);
         assertEquals(2L, outVertex.size());
         assertEquals(marko, outVertex.get(0));
     }
@@ -157,10 +156,26 @@ public class FluxHelperTest {
     public void testGetInVertex() throws Exception {
         loadTestData();
         Object stephen = helper.idFromUuid(STEPHEN_ID);
-        Object edge = helper.idFromUuid(EDGE_ID);
-        List<Object> inVertex = helper.getInVertex(edge);
+        List<Object> inVertex = helper.getInVertex(EDGE_ID);
         assertEquals(2L, inVertex.size());
         assertEquals(stephen, inVertex.get(0));
+    }
+
+    @Test
+    public void testGetInVertexInTx() throws Exception {
+        loadTestData();
+        Object stephen = helper.idFromUuid(STEPHEN_ID);
+        Object marko = helper.idFromUuid(MARKO_ID);
+        UUID newEdgeId = Peer.squuid();
+        Addition addition = helper.addEdge(newEdgeId, "knows", stephen, marko);
+        Object outV = helper
+                .addStatements(addition.statements)
+                .getOutVertex(newEdgeId).get(0);
+        assertEquals(stephen, outV);
+        Object inV = helper
+                .addStatements(addition.statements)
+                .getInVertex(newEdgeId).get(0);
+        assertEquals(marko, inV);
     }
 
     @Test
@@ -270,21 +285,20 @@ public class FluxHelperTest {
     @Test
     public void testGetEdges() throws Exception {
         loadTestData();
-        Object marko = helper.idFromUuid(MARKO_ID);
         Iterable<List<Object>> edges = helper
-                .getEdges(marko, Direction.BOTH);
+                .getEdges(MARKO_ID, Direction.BOTH);
         List<List<Object>> listEdges = Lists.newArrayList(edges);
         assertEquals(1L, listEdges.size());
         assertEquals(helper.idFromUuid(EDGE_ID), listEdges.get(0).get(0));
 
         Iterable<List<Object>> edges2 = helper
-                .getEdges(marko, Direction.BOTH, "knows");
+                .getEdges(MARKO_ID, Direction.BOTH, "knows");
         List<List<Object>> listEdges2 = Lists.newArrayList(edges2);
         assertEquals(1L, listEdges2.size());
         assertEquals(helper.idFromUuid(EDGE_ID), listEdges.get(0).get(0));
 
         Iterable<List<Object>> edges3 = helper
-                .getEdges(marko, Direction.BOTH, "UNKNOWN");
+                .getEdges(MARKO_ID, Direction.BOTH, "UNKNOWN");
         List<List<Object>> listEdges3 = Lists.newArrayList(edges3);
         assertEquals(0L, listEdges3.size());
 
@@ -307,6 +321,35 @@ public class FluxHelperTest {
         Addition addProp = helper.addProperty(marko, Vertex.class, "age", 30);
         connection.transact(addProp.statements);
         Object property = helper.getProperty(marko, Vertex.class, "age", Long.class);
+        assertEquals(30, property);
+    }
+
+    @Test
+    public void testAddPropertyInTransaction() throws Exception {
+        loadTestData();
+        Map<String,Class> props = ImmutableMap.of("age", (Class) Long.class);
+        helper.installElementProperties(props, Vertex.class);
+        Object marko = helper.idFromUuid(MARKO_ID);
+        Addition addProp = helper.addProperty(marko, Vertex.class, "age", 30);
+        //connection.transact(addProp.statements);
+        Object property = helper.addStatements(addProp.statements)
+                .getProperty(marko, Vertex.class, "age", Long.class);
+        assertEquals(30, property);
+    }
+
+    @Test
+    public void testAddPropertyToNewVertexInTransaction() throws Exception {
+        loadTestData();
+        Map<String,Class> props = ImmutableMap.of("age", (Class) Long.class);
+        helper.installElementProperties(props, Vertex.class);
+        UUID newVertexId = Peer.squuid();
+        Addition addition = helper.addVertex(newVertexId);
+        Addition addProp = helper.addProperty(addition.tempId, Vertex.class, "age", 30);
+        //connection.transact(addProp.statements);
+        Object property = helper
+                .addStatements(addition.statements)
+                .addStatements(addProp.statements)
+                .getProperty(addProp.tempId, Vertex.class, "age", Long.class);
         assertEquals(30, property);
     }
 

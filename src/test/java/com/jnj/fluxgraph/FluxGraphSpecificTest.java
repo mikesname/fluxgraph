@@ -44,7 +44,16 @@ public class FluxGraphSpecificTest {
         Vertex v1 = graph.addVertex(null);
         Vertex v2 = graph.addVertex(null);
         Edge edge = v1.addEdge("test", v2);
+
         assertEquals(v1.getId(), edge.getVertex(Direction.OUT).getId());
         assertEquals(v2.getId(), edge.getVertex(Direction.IN).getId());
+    }
+
+    @Test
+    public void testAddProperties() throws Exception {
+        Vertex v1 = graph.addVertex(null);
+        v1.setProperty("foo", "bar");
+
+        assertEquals("bar", v1.getProperty("foo"));
     }
 }

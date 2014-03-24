@@ -22,12 +22,15 @@ import java.util.UUID;
  *
  * @author Mike Bryant (http://github.com/mikesname)
  */
-public final class TxManager {
+final class TxManager {
+
+    private static final UUID GLOBAL_OP = UUID.randomUUID();
 
     private static enum  OpType {
         add,
         mod,
-        del
+        del,
+        global
     }
 
     private static class Op {
@@ -106,5 +109,13 @@ public final class TxManager {
         } else {
             operations.add(new Op(uuid, OpType.del, statement));
         }
+    }
+
+    public void global(Object statement) {
+        operations.add(new Op(GLOBAL_OP, OpType.global, statement));
+    }
+
+    public void flush() {
+        operations.clear();
     }
 }

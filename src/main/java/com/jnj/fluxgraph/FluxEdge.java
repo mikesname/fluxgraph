@@ -6,7 +6,9 @@ import com.tinkerpop.blueprints.util.StringFactory;
 import datomic.Database;
 import datomic.Util;
 
+import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * @author Davy Suvee (http://datablend.be)
@@ -15,14 +17,15 @@ public class FluxEdge extends FluxElement implements TimeAwareEdge {
 
     public FluxEdge(final FluxGraph fluxGraph, final Database database) {
         super(fluxGraph, database);
-        fluxGraph.addToTransaction(fluxGraph.dbWithTx().entid(id), Util.map(":db/id", id,
-                                               ":graph.element/type", ":graph.element.type/edge",
-                                               ":db/ident", uuid));
+//        fluxGraph.addToTransaction(uuid, Util.map(":db/id", graphId,
+//                                               ":graph.element/type", ":graph.element.type/edge",
+//                                               ":db/ident", uuid));
     }
 
-    public FluxEdge(final FluxGraph fluxGraph, final Database database, final Object id) {
+    public FluxEdge(final FluxGraph fluxGraph, final Database database, final UUID uuid, final Object graphId) {
         super(fluxGraph, database);
-        this.id = id;
+        this.graphId = graphId;
+        this.uuid = uuid;
     }
 
     @Override
@@ -31,7 +34,7 @@ public class FluxEdge extends FluxElement implements TimeAwareEdge {
         Object previousTimeId = FluxUtil.getPreviousTransaction(fluxGraph, this);
         if (previousTimeId != null) {
             // Create a new version of the edge timescoped to the previous time id
-            return new FluxEdge(fluxGraph, fluxGraph.getRawGraph(previousTimeId), id);
+            return new FluxEdge(fluxGraph, fluxGraph.getRawGraph(previousTimeId), uuid, graphId);
         }
         return null;
     }
@@ -42,10 +45,10 @@ public class FluxEdge extends FluxElement implements TimeAwareEdge {
         Object nextTimeId = FluxUtil.getNextTransactionId(fluxGraph, this);
         if (nextTimeId != null) {
             // Create a new version of the edge timescoped to the next time id
-            FluxEdge nextVertexVersion = new FluxEdge(fluxGraph, fluxGraph.getRawGraph(nextTimeId), id);
+            FluxEdge nextVertexVersion = new FluxEdge(fluxGraph, fluxGraph.getRawGraph(nextTimeId), uuid, graphId);
             // If no next version exists, the version of the edge is the current version (timescope with a null database)
             if (FluxUtil.getNextTransactionId(fluxGraph, nextVertexVersion) == null) {
-                return new FluxEdge(fluxGraph, null, id);
+                return new FluxEdge(fluxGraph, null, uuid, graphId);
             }
             else {
                 return nextVertexVersion;
@@ -76,12 +79,15 @@ public class FluxEdge extends FluxElement implements TimeAwareEdge {
 
     @Override
     public TimeAwareVertex getVertex(Direction direction) throws IllegalArgumentException {
-        if (direction.equals(Direction.OUT))
-            return new FluxVertex(fluxGraph, database, getDatabase().datoms(Database.EAVT, getId(), fluxGraph.GRAPH_EDGE_OUT_VERTEX).iterator().next().v());
-        else if (direction.equals(Direction.IN))
-            return new FluxVertex(fluxGraph, database, getDatabase().datoms(Database.EAVT, getId(), fluxGraph.GRAPH_EDGE_IN_VERTEX).iterator().next().v());
-        else
+        if (direction.equals(Direction.OUT)) {
+            List<Object> outVertex = fluxGraph.getHelper().getOutVertex(uuid);
+            return new FluxVertex(fluxGraph, database, (UUID)outVertex.get(1), outVertex.get(0));
+        } else if (direction.equals(Direction.IN)) {
+            List<Object> inVertex = fluxGraph.getHelper().getInVertex(uuid);
+            return new FluxVertex(fluxGraph, database, (UUID)inVertex.get(1), inVertex.get(0));
+        } else {
             throw ExceptionFactory.bothIsNotSupported();
+        }
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.jnj.fluxgraph;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Iterables;
 import com.tinkerpop.blueprints.*;
 import com.tinkerpop.blueprints.util.DefaultQuery;
 import com.tinkerpop.blueprints.util.DefaultVertexQuery;
@@ -16,14 +18,12 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
 
     protected FluxVertex(final FluxGraph fluxGraph, final Database database) {
         super(fluxGraph, database);
-        fluxGraph.addToTransaction(fluxGraph.dbWithTx().entid(id), Util.map(":db/id", id,
-                                              ":graph.element/type", ":graph.element.type/vertex",
-                                              ":db/ident", uuid));
     }
 
-    public FluxVertex(final FluxGraph fluxGraph, final Database database, final Object id) {
+    public FluxVertex(final FluxGraph fluxGraph, final Database database, final UUID uuid, final Object id) {
         super(fluxGraph, database);
-        this.id = id;
+        this.graphId = id;
+        this.uuid = uuid;
     }
 
     @Override
@@ -32,7 +32,7 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
         Object previousTimeId = FluxUtil.getPreviousTransaction(fluxGraph, this);
         if (previousTimeId != null) {
             // Create a new version of the vertex timescoped to the previous time id
-            return new FluxVertex(fluxGraph, fluxGraph.getRawGraph(previousTimeId), id);
+            return new FluxVertex(fluxGraph, fluxGraph.getRawGraph(previousTimeId), uuid, graphId);
         }
         return null;
     }
@@ -42,10 +42,10 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
         // Retrieve the next version time id
         Object nextTimeId = FluxUtil.getNextTransactionId(fluxGraph, this);
         if (nextTimeId != null) {
-            FluxVertex nextVertexVersion = new FluxVertex(fluxGraph, fluxGraph.getRawGraph(nextTimeId), id);
+            FluxVertex nextVertexVersion = new FluxVertex(fluxGraph, fluxGraph.getRawGraph(nextTimeId), uuid, graphId);
             // If no next version exists, the version of the edge is the current version (timescope with a null database)
             if (FluxUtil.getNextTransactionId(fluxGraph, nextVertexVersion) == null) {
-                return new FluxVertex(fluxGraph, null, id);
+                return new FluxVertex(fluxGraph, null, uuid, graphId);
             }
             else {
                 return nextVertexVersion;
@@ -81,7 +81,7 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
         } else if (direction.equals(Direction.IN))
             return this.getInEdges(labels);
         else {
-            return new MultiIterable<Edge>(Arrays.asList(this.getInEdges(labels), this.getOutEdges(labels)));
+            return Iterables.concat(this.getInEdges(labels), this.getOutEdges(labels));
         }
     }
 
@@ -113,9 +113,9 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
             while (inEdgesIt.hasNext()) {
                 invertices.add(inEdgesIt.next().getVertex(Direction.OUT).getId());
             }
-            return new MultiIterable<Vertex>(Arrays.<Iterable<Vertex>>asList(
+            return Iterables.concat(
                     new FluxIterable<Vertex>(outvertices, fluxGraph, database, Vertex.class),
-                    new FluxIterable<Vertex>(invertices, fluxGraph, database, Vertex.class)));
+                    new FluxIterable<Vertex>(invertices, fluxGraph, database, Vertex.class));
         }
     }
 
@@ -156,36 +156,52 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
     }
 
     private Iterable<Edge> getInEdges(final String... labels) {
-        if (labels.length == 0) {
-            return getInEdges();
-        }
-        Collection<List<Object>> inEdges = Peer.q("[:find ?edge " +
-                                                   ":in $ ?vertex [?label ...] " +
-                                                   ":where [?edge :graph.edge/inVertex ?vertex] " +
-                                                          "[?edge :graph.edge/label ?label ] ]", getDatabase(), id, labels);
-        return new FluxIterable<Edge>(inEdges, fluxGraph, database, Edge.class);
+//        if (labels.length == 0) {
+//            return getInEdges();
+//        }
+//        Collection<List<Object>> inEdges = Peer.q("[:find ?edge " +
+//                                                   ":in $ ?vertex [?label ...] " +
+//                                                   ":where [?edge :graph.edge/inVertex ?vertex] " +
+//                                                          "[?edge :graph.edge/label ?label ] ]", getDatabase(), graphId,
+//                labels);
+//        return new FluxIterable<Edge>(inEdges, fluxGraph, database, Edge.class);
+        return Iterables.transform(fluxGraph.getHelper().getEdges(uuid, Direction.IN, labels),
+                new Function<List<Object>, Edge>() {
+            @Override
+            public Edge apply(List<Object> input) {
+                return new FluxEdge(fluxGraph, database, (UUID)input.get(1), input.get(0));
+            }
+        });
     }
 
-    private Iterable<Edge> getInEdges() {
-        Iterable<Datom> inEdges = getDatabase().datoms(Database.AVET, fluxGraph.GRAPH_EDGE_IN_VERTEX, getId());
-        return new FluxIterable<Edge>(inEdges, fluxGraph, database, Edge.class);
-    }
+//    private Iterable<Edge> getInEdges() {
+//        Iterable<Datom> inEdges = getDatabase().datoms(Database.AVET, fluxGraph.GRAPH_EDGE_IN_VERTEX, getId());
+//        return new FluxIterable<Edge>(inEdges, fluxGraph, database, Edge.class);
+//    }
 
     private Iterable<Edge> getOutEdges(final String... labels) {
-        if (labels.length == 0) {
-            return getOutEdges();
-        }
-        Collection<List<Object>> outEdges = Peer.q("[:find ?edge " +
-                                                    ":in $ ?vertex [?label ...] " +
-                                                    ":where [?edge :graph.edge/outVertex ?vertex] " +
-                                                           "[?edge :graph.edge/label ?label ] ]", getDatabase(), id, labels);
-        return new FluxIterable<Edge>(outEdges, fluxGraph, database, Edge.class);
+//        if (labels.length == 0) {
+//            return getOutEdges();
+//        }
+//        Collection<List<Object>> outEdges = Peer.q("[:find ?edge " +
+//                                                    ":in $ ?vertex [?label ...] " +
+//                                                    ":where [?edge :graph.edge/outVertex ?vertex] " +
+//                                                           "[?edge :graph.edge/label ?label ] ]", getDatabase(), graphId,
+//                labels);
+//        return new FluxIterable<Edge>(outEdges, fluxGraph, database, Edge.class);
+        return Iterables.transform(fluxGraph.getHelper().getEdges(uuid, Direction.OUT, labels),
+                new Function<List<Object>, Edge>() {
+            @Override
+            public Edge apply(List<Object> input) {
+                return new FluxEdge(fluxGraph, database, (UUID)input.get(1), input.get(0));
+            }
+        });
     }
 
-    private Iterable<Edge> getOutEdges() {
-        Iterable<Datom> outEdges = getDatabase().datoms(Database.AVET, fluxGraph.GRAPH_EDGE_OUT_VERTEX, getId());
-        return new FluxIterable<Edge>(outEdges, fluxGraph, database, Edge.class);
-    }
+//    private Iterable<Edge> getOutEdges() {
+//        Iterable<Datom> outEdges = getDatabase().datoms(Database.AVET, fluxGraph.GRAPH_EDGE_OUT_VERTEX, getId());
+//        return new FluxIterable<Edge>(outEdges, fluxGraph, database, Edge.class);
+//    }
 
     @Override
     public void remove() {
