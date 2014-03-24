@@ -345,11 +345,11 @@ public class FluxHelperTest {
         UUID newVertexId = Peer.squuid();
         Addition addition = helper.addVertex(newVertexId);
         Addition addProp = helper.addProperty(addition.tempId, Vertex.class, "age", 30);
-        //connection.transact(addProp.statements);
+        //Map map = connection.transact(addProp.statements).get();
         Object property = helper
                 .addStatements(addition.statements)
                 .addStatements(addProp.statements)
-                .getProperty(addProp.tempId, Vertex.class, "age", Long.class);
+                .getProperty(addition.tempId, Vertex.class, "age", Long.class);
         assertEquals(30, property);
     }
 

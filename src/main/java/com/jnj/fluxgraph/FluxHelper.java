@@ -3,6 +3,7 @@ package com.jnj.fluxgraph;
 import clojure.lang.Keyword;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.tinkerpop.blueprints.Direction;
 import datomic.*;
@@ -81,6 +82,10 @@ public final class FluxHelper {
     }
 
     private Database getDatabase() {
+        return (Database)connection.db().with(statements).get(DB_AFTER);
+    }
+
+    private Database getDatabase(List statements) {
         return (Database)connection.db().with(statements).get(DB_AFTER);
     }
 
@@ -371,9 +376,52 @@ public final class FluxHelper {
      * @return The property value, or null if it doesn't exist
      */
     public Object getProperty(Object id, Class elementClass, String key, Class valueClass) {
-        Iterator<List<Object>> iterator = Peer.q("[:find ?p :in $ ?e ?k :where [?e ?k ?p]]",
-                getDatabase(), getDatabase().entid(id), FluxUtil.createKey(key, valueClass, elementClass)).iterator();
+        Keyword keyword = FluxUtil.createKey(key, valueClass, elementClass);
+        System.out.println("Finding " + id + " with " + keyword + " in " + statements);
+        Collection<List<Object>> lists = Peer.q("[:find ?p :in $ ?e ?k :where [?e ?k ?p]]",
+                getDatabase(), id, keyword);
+        System.out.println(lists);
+        Iterator<List<Object>> iterator = lists.iterator();
         return iterator.hasNext() ? iterator.next().get(0) : null;
+    }
+
+    public List reduce(List<Object> maps) {
+        List statements = Lists.newArrayList();
+        Map mainMap = Maps.newHashMap();
+        for (Object obj : maps) {
+            if (obj instanceof Map) {
+                mainMap.putAll((Map)obj);
+            } else {
+                statements.add(obj);
+            }
+        }
+        statements.add(mainMap);
+        return statements;
+    }
+
+    public List qMapToList(List<Object> lists) {
+        List statements = Lists.newArrayList();
+        for (Object obj : lists) {
+            if (obj instanceof Map) {
+                Map map = (Map)obj;
+                for (Object o : map.keySet()) {
+                    System.out.println("Item: " + o + " -> " + map.get(o));
+                }
+                String idKey = ":db/id";
+                Object id = map.get(idKey);
+                if (id == null) {
+                    throw new IllegalArgumentException("no :db/id found in map: " + map);
+                }
+                for (Object key : map.keySet()) {
+                    if (!key.equals(idKey)) {
+                        statements.add(Util.list(id, key, map.get(key), null));
+                    }
+                }
+            } else {
+                statements.add(obj);
+            }
+        }
+        return statements;
     }
 
     /**
