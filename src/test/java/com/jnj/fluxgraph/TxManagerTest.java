@@ -21,29 +21,38 @@ public class TxManagerTest {
     @Test
     public void testAdditionAndDeletion() {
         TxManager txManager = new TxManager();
-        txManager.addAddOp(item1, Util.list("add"));
-        txManager.addModOp(item1, Util.list("mod"));
-        txManager.addDelOp(item1, Util.list("del"));
-        assertTrue(txManager.getOps().isEmpty());
+        txManager.add(item1, Util.list("add"));
+        txManager.mod(item1, Util.list("mod"));
+        txManager.del(item1, Util.list("del"));
+        assertTrue(txManager.ops().isEmpty());
     }
 
     @Test
     public void testAdditionAndDeletionInterleaved() {
         TxManager txManager = new TxManager();
-        txManager.addModOp(item2, Util.list("mod"));
-        assertFalse(txManager.getOps().isEmpty());
+        txManager.mod(item2, Util.list("mod"));
+        assertFalse(txManager.ops().isEmpty());
+    }
+
+    @Test
+    public void testAdditionAndDeletionWithTouched() {
+        TxManager txManager = new TxManager();
+        txManager.add(item1, Util.list("add"));
+        txManager.add(item2, Util.list("add"), item1);
+        txManager.del(item1, Util.list("del"));
+        assertTrue(txManager.ops().isEmpty());
     }
 
     @Test
     public void testIsAdded() {
         TxManager txManager = new TxManager();
-        txManager.addAddOp(item1, Util.list("add"));
-        txManager.addModOp(item1, Util.list("mod"));
-        txManager.addModOp(item2, Util.list("mod"));
-        txManager.addDelOp(item1, Util.list("del"));
-        assertEquals(1L, txManager.getOps().size());
+        txManager.add(item1, Util.list("add"));
+        txManager.mod(item1, Util.list("mod"));
+        txManager.mod(item2, Util.list("mod"));
+        txManager.del(item1, Util.list("del"));
+        assertEquals(1L, txManager.ops().size());
 
-        txManager.addAddOp(item1, Util.list("add"));
+        txManager.add(item1, Util.list("add"));
         assertTrue(txManager.isAdded(item1));
         assertFalse(txManager.isAdded(item2));
     }

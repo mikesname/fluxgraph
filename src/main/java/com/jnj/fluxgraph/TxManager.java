@@ -1,10 +1,8 @@
 package com.jnj.fluxgraph;
 
 import com.google.common.base.Function;
-import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Multimap;
 
 import java.util.List;
 import java.util.UUID;
@@ -36,10 +34,24 @@ public final class TxManager {
         public final UUID uuid;
         public final OpType opType;
         public final Object statement;
-        public Op(UUID uuid, OpType opType, Object statement) {
+        public final UUID[] touched;
+        public Op(UUID uuid, OpType opType, Object statement, UUID... touched) {
             this.uuid = uuid;
             this.opType = opType;
             this.statement = statement;
+            this.touched = touched;
+        }
+        public boolean concerns(UUID uuid) {
+            if (this.uuid.equals(uuid)) {
+                return true;
+            } else {
+                for (UUID t : touched) {
+                    if (t.equals(uuid)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
     }
 
@@ -49,7 +61,7 @@ public final class TxManager {
         operations = Lists.newArrayList();
     }
 
-    public List<Object> getOps() {
+    public List<Object> ops() {
         return Lists.newArrayList(
                 Iterables.transform(operations, new Function<Op, Object>() {
                     @Override
@@ -68,23 +80,23 @@ public final class TxManager {
         return false;
     }
 
-    public void addAddOp(UUID uuid, Object statement) {
-        operations.add(new Op(uuid, OpType.add, statement));
+    public void add(UUID uuid, Object statement, UUID... touched) {
+        operations.add(new Op(uuid, OpType.add, statement, touched));
     }
 
-    public void addModOp(UUID uuid, Object statement) {
+    public void mod(UUID uuid, Object statement) {
         operations.add(new Op(uuid, OpType.mod, statement));
     }
 
-    public void addDelOp(UUID uuid, Object statement) {
+    public void del(UUID uuid, Object statement) {
         List<Op> filteredOps = Lists.newArrayList();
         boolean expunge = false;
         for (Op op : operations) {
-            if (uuid.equals(op.uuid) && op.opType == OpType.add) {
+            if (op.concerns(uuid) && op.opType == OpType.add) {
                 expunge = true;
             }
 
-            if (!(expunge && op.uuid.equals(uuid))) {
+            if (!(expunge && op.concerns(uuid))) {
                 filteredOps.add(op);
             }
         }
