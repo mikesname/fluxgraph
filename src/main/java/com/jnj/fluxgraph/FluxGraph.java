@@ -4,7 +4,6 @@ import clojure.lang.ExceptionInfo;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Multimaps;
 import com.tinkerpop.blueprints.*;
 import com.tinkerpop.blueprints.util.DefaultGraphQuery;
 import com.tinkerpop.blueprints.util.ExceptionFactory;
@@ -13,7 +12,6 @@ import static datomic.Connection.TEMPIDS;
 import static datomic.Connection.DB_AFTER;
 import datomic.*;
 
-import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 
@@ -90,9 +88,9 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         FEATURES.supportsStringProperty = true;
 
         FEATURES.isWrapper = true;
-        //FEATURES.supportsKeyIndices = true;
-        //FEATURES.supportsVertexKeyIndex = true;
-        //FEATURES.supportsEdgeKeyIndex = true;
+        FEATURES.supportsKeyIndices = false;
+        FEATURES.supportsVertexKeyIndex = false;
+        FEATURES.supportsEdgeKeyIndex = false;
         FEATURES.supportsThreadedTransactions = false;
         FEATURES.ignoresSuppliedIds = true;
     }
