@@ -25,6 +25,8 @@ public final class FluxHelper {
     public static final Keyword ELEMENT_ID = Keyword.intern("graph.element/id");
     public static final Keyword IN_VERTEX = Keyword.intern("graph.edge/inVertex");
     public static final Keyword OUT_VERTEX = Keyword.intern("graph.edge/outVertex");
+    public static final Keyword IN_DIRECTION = Keyword.intern("in");
+    public static final Keyword OUT_DIRECTION = Keyword.intern("out");
 
     public static class Addition {
         public Object tempId;
@@ -221,36 +223,44 @@ public final class FluxHelper {
         if (labels.length > 0) {
             switch (direction) {
                 case OUT:
-                    return Peer.q("[:find ?edge ?uuid :in $ ?id ?out [?label ...] " +
-                            ":where [?edge ?out ?id] [?edge :graph.element/id ?uuid ] " +
-                            "[ ?edge :graph.edge/label ?label ]]",
-                            getDatabase(), vertexId, OUT_VERTEX, labels);
+                    return Peer.q("[:find ?e ?uuid ?dir ?label" +
+                            " :in $ ?v [?label ...] ?dir" +
+                            " :where [?e :graph.edge/outVertex ?v]" +
+                            " [?e :graph.edge/label ?label]" +
+                            " [?e :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, labels, OUT_DIRECTION);
                 case IN:
-                    return Peer.q("[:find ?edge ?uuid :in $ ?id ?in [?label ...] " +
-                            ":where [?edge ?in ?id] [?edge :graph.element/id ?uuid ] " +
-                            "[ ?edge :graph.edge/label ?label ]]",
-                            getDatabase(), vertexId, IN_VERTEX, labels);
+                    return Peer.q("[:find ?e ?uuid ?dir ?label" +
+                            " :in $ ?v [?label ...] ?dir" +
+                            " :where [?e :graph.edge/inVertex ?v] " +
+                            " [?e :graph.edge/label ?label]" +
+                            " [?e :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, labels, IN_DIRECTION);
                 case BOTH:
-                    return Sets.newHashSet(Iterables.concat(
-                            getEdges(vertexId, Direction.OUT, labels),
-                            getEdges(vertexId, Direction.IN, labels)));
+                    return Iterables.concat(
+                            getEdges(vertexId, Direction.OUT, labels), getEdges(vertexId, Direction.IN, labels));
                 default:
                     throw new UnknownError("Unexpected edge direction!");
             }
         } else {
             switch (direction) {
                 case OUT:
-                    return Peer.q("[:find ?edge ?uuid :in $ ?id ?out " +
-                            ":where [?edge ?out ?id] [?edge :graph.element/id ?uuid ] ]",
-                            getDatabase(), vertexId, OUT_VERTEX);
+                    return Peer.q("[:find ?e ?uuid ?dir ?label" +
+                            " :in $ ?v ?dir" +
+                            " :where [?e :graph.edge/outVertex ?v] " +
+                            " [?e :graph.edge/label ?label]" +
+                            " [?e :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, OUT_DIRECTION);
                 case IN:
-                    return Peer.q("[:find ?edge ?uuid :in $ ?id ?in " +
-                            ":where [?edge ?in ?id] [?edge :graph.element/id ?uuid ] ]",
-                            getDatabase(), vertexId, IN_VERTEX);
+                    return Peer.q("[:find ?e ?uuid ?dir ?label" +
+                            " :in $ ?v ?dir" +
+                            " :where [?e :graph.edge/inVertex ?v] " +
+                            " [?e :graph.edge/label ?label]" +
+                            " [?e :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, IN_DIRECTION);
                 case BOTH:
-                    return Sets.newHashSet(Iterables.concat(
-                            getEdges(vertexId, Direction.OUT),
-                            getEdges(vertexId, Direction.IN)));
+                    return Iterables.concat(
+                            getEdges(vertexId, Direction.OUT), getEdges(vertexId, Direction.IN));
                 default:
                     throw new UnknownError("Unexpected edge direction!");
             }
@@ -266,41 +276,51 @@ public final class FluxHelper {
      */
     public Iterable<List<Object>> getVertices(Object vertexId, Direction direction, String... labels) {
         // NB: This is REALLY crap right now...
-        if (labels.length == 0) {
+        if (labels.length > 0) {
             switch (direction) {
                 case OUT:
-                    return Peer.q("[:find ?v :in $ ?id ?out ?in :where [?edge ?out ?id] [?edge ?in ?v] ]",
-                            getDatabase(), vertexId, OUT_VERTEX, IN_VERTEX);
+                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
+                            " :in $ ?v [?label ...] ?dir" +
+                            " :where [?e :graph.edge/inVertex ?other] " +
+                            " [?e :graph.edge/outVertex ?v]" +
+                            " [?e :graph.edge/label ?label]" +
+                            " [?other :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, labels, OUT_DIRECTION);
                 case IN:
-                    return Peer.q("[:find ?v :in $ ?id ?out ?in :where [?edge ?out ?id] [?edge ?in ?v] ]",
-                            getDatabase(), vertexId, IN_VERTEX, OUT_VERTEX);
+                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
+                                    " :in $ ?v [?label ...] ?dir" +
+                                    " :where [?e :graph.edge/outVertex ?other] " +
+                                    " [?e :graph.edge/inVertex ?v]" +
+                                    " [?e :graph.edge/label ?label]" +
+                                    " [?other :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, labels, IN_DIRECTION);
                 case BOTH:
-                    return Sets.newHashSet(Iterables.concat(
-                            getInVertices(vertexId), getOutVertices(vertexId)));
+                    return Iterables.concat(
+                            getInVertices(vertexId), getOutVertices(vertexId));
                 default:
                     throw new UnknownError("Unexpected edge direction!");
             }
         } else {
             switch (direction) {
                 case OUT:
-                    return Peer.q("[:find ?v :in $ ?id ?out ?in [?label ...] " +
-                            ":where [?edge ?out ?id] [?edge ?in ?v] [?edge :graph.edge/label ?label ] ]",
-                            getDatabase(), vertexId, OUT_VERTEX, IN_VERTEX, labels);
-
+                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
+                            " :in $ ?v ?dir" +
+                            " :where [?e :graph.edge/inVertex ?other] " +
+                            " [?e :graph.edge/outVertex ?v]" +
+                            " [?e :graph.edge/label ?label] " +
+                            " [?other :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, OUT_DIRECTION);
                 case IN:
-                    return Peer.q("[:find ?v :in $ ?id ?out ?in [?label ...] " +
-                            ":where [?edge ?out ?id] [?edge ?in ?v] [?edge :graph.edge/label ?label ] ]",
-                            getDatabase(), vertexId, IN_VERTEX, OUT_VERTEX, labels);
-
-                // Can't solve the union query here...?
-                //case BOTH: return Peer.q("[:find ?inV ?outV :in $ ?v ?out ?in [?label ...] " +
-                //        ":where  [?edge2 ?in ?v] [?edge2 ?out ?inV]" +
-                //        " [?edge2 :graph.edge/label ?label ] ]",
-                //        getDatabase(), vertexId, OUT_VERTEX, IN_VERTEX, labels);
+                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
+                            " :in $ ?v ?dir" +
+                            " :where [?e :graph.edge/outVertex ?other] " +
+                            " [?e :graph.edge/inVertex ?v]" +
+                            " [?e :graph.edge/label ?label] " +
+                            " [?other :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, IN_DIRECTION);
                 case BOTH:
-                    return Sets.newHashSet(Iterables.concat(
-                            getInVertices(vertexId, labels), getOutVertices(vertexId, labels)));
-
+                    return Iterables.concat(
+                            getInVertices(vertexId), getOutVertices(vertexId));
                 default:
                     throw new UnknownError("Unexpected edge direction!");
             }

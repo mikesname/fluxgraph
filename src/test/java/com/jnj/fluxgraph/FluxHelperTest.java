@@ -193,10 +193,8 @@ public class FluxHelperTest {
         ArrayList<List<Object>> knowsList = Lists.newArrayList(knows);
         assertEquals(2L, knowsList.size());
         for (List<Object> i : knowsList) {
-            for (Object n : i) {
-                Object name = txHelper.getProperty(n, Vertex.class, "name", String.class);
-                System.out.println(name);
-            }
+            Object name = txHelper.getProperty(i.get(0), Vertex.class, "name", String.class);
+            System.out.println(name);
         }
     }
 
@@ -217,10 +215,8 @@ public class FluxHelperTest {
         Iterable<List<Object>> knows = helper.getVertices(stephen, Direction.BOTH, "knows");
         System.out.println(Lists.newArrayList(knows));
         for (List<Object> i : knows) {
-            for (Object n : i) {
-                Object name = helper.getProperty(n, Vertex.class, "name", String.class);
-                System.out.println(name);
-            }
+            Object name = helper.getProperty(i.get(0), Vertex.class, "name", String.class);
+            System.out.println(name);
         }
     }
 
@@ -234,7 +230,7 @@ public class FluxHelperTest {
                 .addStatements(edgeAddition.statements);
         Iterable<List<Object>> knows = txHelper
                 .getVertices(stephen, Direction.BOTH, "knows");
-        assertEquals(2L, Iterables.size(knows));
+        assertEquals(3L, Iterables.size(knows));
     }
 
     @Test
@@ -247,7 +243,7 @@ public class FluxHelperTest {
                 .addStatements(edgeAddition.statements);
         Iterable<List<Object>> knows = txHelper
                 .getVertices(stephen, Direction.BOTH);
-        assertEquals(2L, Iterables.size(knows));
+        assertEquals(3L, Iterables.size(knows));
     }
 
     @Test
@@ -268,7 +264,7 @@ public class FluxHelperTest {
             System.out.println(txHelper.getProperty(item.get(0),
                     Vertex.class, "name", String.class));
         }
-        assertEquals(3L, listKnows.size());
+        assertEquals(5L, listKnows.size());
     }
 
     @Test
