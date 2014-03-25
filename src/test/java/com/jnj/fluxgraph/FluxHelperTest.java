@@ -196,8 +196,28 @@ public class FluxHelperTest {
         Addition newVertex = helper.addVertex(newUuid);
         Addition newVertexProp = helper.addProperty(newVertex.tempId,
                 Vertex.class, "name", "Bob");
+        Object bobNameAfterAdd = helper
+                .addStatements(newVertex.statements)
+                .addStatements(newVertexProp.statements)
+                .getProperty(newVertex.tempId, Vertex.class, "name", String.class);
+        System.out.println("Bob name after add: " + bobNameAfterAdd);
+
+        Object bobNameAfterAddByUuid = helper
+                .addStatements(newVertex.statements)
+                .addStatements(newVertexProp.statements)
+                .getPropertyByUuid(newUuid, Vertex.class, "name", String.class);
+        System.out.println("Bob name after add by UUID: " + bobNameAfterAddByUuid);
+
+        System.out.println("Bob ID: " + newUuid + " (int id) " + newVertex.tempId);
         UUID newEdgeUuid = Peer.squuid();
         Addition newVertexAddEdge = helper.addEdge(newEdgeUuid, "knows", marko, newVertex.tempId);
+
+        Object bobNameAfterAddEdge = helper
+                .addStatements(newVertex.statements)
+                .addStatements(newVertexProp.statements)
+                .addStatements(newVertexAddEdge.statements)
+                .getProperty(newVertex.tempId, Vertex.class, "name", String.class);
+        System.out.println("Bob name after add edge: " + bobNameAfterAddEdge);
 
         FluxHelper txHelper = helper
                 .addStatements(newVertex.statements)
@@ -206,10 +226,11 @@ public class FluxHelperTest {
         Iterable<List<Object>> knows = txHelper
                 .getOutVertices(marko, "knows");
         ArrayList<List<Object>> knowsList = Lists.newArrayList(knows);
+        System.out.println("Knows list: " + knowsList);
         assertEquals(2L, knowsList.size());
         for (List<Object> i : knowsList) {
             Object name = txHelper.getProperty(i.get(0), Vertex.class, "name", String.class);
-            System.out.println(name);
+            System.out.println("Name: " + name + " (id :" + i.get(0) + ")");
         }
     }
 

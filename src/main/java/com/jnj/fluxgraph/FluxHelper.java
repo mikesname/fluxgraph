@@ -369,6 +369,25 @@ public final class FluxHelper {
     /**
      * Fetch a property from an element
      *
+     * @param uuid           The graph UUID
+     * @param elementClass The class of the element, either Vertex or Edge
+     * @param key          The property key
+     * @param valueClass   The property's value class
+     * @return The property value, or null if it doesn't exist
+     */
+    public Object getPropertyByUuid(UUID uuid, Class elementClass, String key, Class valueClass) {
+        Keyword keyword = FluxUtil.createKey(key, valueClass, elementClass);
+        Collection<List<Object>> lists
+                = Peer.q("[:find ?p :in $ ?e ?k :where [?e ?k ?p] ]",
+                getDatabase(), Keyword.intern(uuid.toString()), keyword);
+        System.out.println(lists);
+        Iterator<List<Object>> iterator = lists.iterator();
+        return iterator.hasNext() ? iterator.next().get(0) : null;
+    }
+
+    /**
+     * Fetch a property from an element
+     *
      * @param id           The graph internal id
      * @param elementClass The class of the element, either Vertex or Edge
      * @param key          The property key
@@ -468,6 +487,7 @@ public final class FluxHelper {
         Object tempid = Peer.tempid(":graph");
         return new Addition(tempid, Util.list(Util.map(
                 ":db/id", tempid,
+                ":db/ident", Keyword.intern(uuid.toString()),
                 ":graph.element/type", VERTEX_TYPE,
                 ELEMENT_ID, uuid
         )));
