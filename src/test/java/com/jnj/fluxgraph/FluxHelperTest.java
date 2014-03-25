@@ -11,6 +11,7 @@ import com.tinkerpop.blueprints.Vertex;
 import datomic.Connection;
 import datomic.Entity;
 import datomic.Peer;
+import datomic.Util;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -328,9 +329,31 @@ public class FluxHelperTest {
     @Test
     public void testGetProperty() throws Exception {
         loadTestData();
-        Object marko = helper.idFromUuid(MARKO_ID);
-        Object property = helper.getProperty(marko, Vertex.class, "name", String.class);
+        Object property = helper
+                .getPropertyByUuid(MARKO_ID, Vertex.class, "name", String.class);
         assertEquals("Marko", property);
+    }
+
+    @Test
+    public void testGetPropertyKeysByUuid() throws Exception {
+        loadTestData();
+        Set<String> propertyKeys = helper.getPropertyKeysByUuid(MARKO_ID);
+        assertEquals(1L, propertyKeys.size());
+        assertEquals("name", propertyKeys.iterator().next());
+    }
+
+    @Test
+    public void testGetPropertyKeysByUuidInTx() throws Exception {
+        loadTestData();
+        UUID newVertexId = Peer.squuid();
+        Addition addition = helper.addVertex(newVertexId);
+        Addition addProp = helper.addProperty(addition.tempId, Vertex.class, "name", "Bob");
+        Set<String> propertyKeys = helper
+                .addStatements(addition.statements)
+                .addStatements(addProp.statements)
+                .getPropertyKeysByUuid(newVertexId);
+        assertEquals(1L, propertyKeys.size());
+        assertEquals("name", propertyKeys.iterator().next());
     }
 
     @Test
@@ -338,10 +361,22 @@ public class FluxHelperTest {
         loadTestData();
         Map<String,Class> props = ImmutableMap.of("age", (Class) Long.class);
         helper.installElementProperties(props, Vertex.class);
-        Object marko = helper.idFromUuid(MARKO_ID);
-        Addition addProp = helper.addProperty(marko, Vertex.class, "age", 30);
+        Addition addProp = helper.addPropertyByUuid(MARKO_ID, Vertex.class, "age", 30);
         connection.transact(addProp.statements);
-        Object property = helper.getProperty(marko, Vertex.class, "age", Long.class);
+        Object property = helper
+                .getPropertyByUuid(MARKO_ID, Vertex.class, "age", Long.class);
+        assertEquals(30, property);
+    }
+
+    @Test
+    public void testShortGetProperty() throws Exception {
+        loadTestData();
+        Map<String,Class> props = ImmutableMap.of("age", (Class) Long.class);
+        helper.installElementProperties(props, Vertex.class);
+        Addition addProp = helper.addPropertyByUuid(MARKO_ID, Vertex.class, "age", 30);
+        connection.transact(addProp.statements);
+        Object property = helper
+                .getPropertyByUuid(MARKO_ID, "age");
         assertEquals(30, property);
     }
 
@@ -351,10 +386,21 @@ public class FluxHelperTest {
         Map<String,Class> props = ImmutableMap.of("age", (Class) Long.class);
         helper.installElementProperties(props, Vertex.class);
         Object marko = helper.idFromUuid(MARKO_ID);
-        Addition addProp = helper.addProperty(marko, Vertex.class, "age", 30);
+        Addition addProp = helper.addPropertyByUuid(MARKO_ID, Vertex.class, "age", 30);
+        Object property = helper.addStatements(addProp.statements)
+                .getPropertyByUuid(MARKO_ID, Vertex.class, "age", Long.class);
+        assertEquals(30, property);
+    }
+
+    @Test
+    public void testAddPropertyByUuidInTransaction() throws Exception {
+        loadTestData();
+        Map<String,Class> props = ImmutableMap.of("age", (Class) Long.class);
+        helper.installElementProperties(props, Vertex.class);
+        Addition addProp = helper.addPropertyByUuid(MARKO_ID, Vertex.class, "age", 30);
         //connection.transact(addProp.statements);
         Object property = helper.addStatements(addProp.statements)
-                .getProperty(marko, Vertex.class, "age", Long.class);
+                .getPropertyByUuid(MARKO_ID, Vertex.class, "age", Long.class);
         assertEquals(30, property);
     }
 
@@ -370,8 +416,31 @@ public class FluxHelperTest {
         Object property = helper
                 .addStatements(addition.statements)
                 .addStatements(addProp.statements)
-                .getProperty(addition.tempId, Vertex.class, "age", Long.class);
+                .getPropertyByUuid(newVertexId, Vertex.class, "age", Long.class);
         assertEquals(30, property);
+    }
+
+    @Test
+    public void testAddAndRemovePropertyToNewVertexInTransaction() throws Exception {
+        loadTestData();
+        Map<String,Class> props = ImmutableMap.of("age", (Class) Long.class);
+        helper.installElementProperties(props, Vertex.class);
+        UUID newVertexId = Peer.squuid();
+        Addition addition = helper.addVertex(newVertexId);
+        Addition addProp = helper.addProperty(addition.tempId, Vertex.class, "age", 30);
+        //Map map = connection.transact(addProp.delStatements).get();
+        Object property = helper
+                .addStatements(addition.statements)
+                .addStatements(addProp.statements)
+                .getPropertyByUuid(newVertexId, Vertex.class, "age", Long.class);
+        assertEquals(30, property);
+        List delStatements = helper.removeProperty(addition.tempId, Vertex.class, "age", Long.class);
+        Object property2 = helper
+                .addStatements(addition.statements)
+                .addStatements(addProp.statements)
+                .addStatements(delStatements)
+                .getPropertyByUuid(newVertexId, Vertex.class, "age", Long.class);
+        assertNull(property2);
     }
 
     @Test
@@ -379,11 +448,10 @@ public class FluxHelperTest {
         loadTestData();
         Map<String,Class> props = ImmutableMap.of("date", (Class)Long.class);
         helper.installElementProperties(props, Edge.class);
-        Object edge = helper.idFromUuid(EDGE_ID);
         Long testDate = new Date(0).getTime();
-        Addition addProp = helper.addProperty(edge, Edge.class, "date", testDate);
+        Addition addProp = helper.addPropertyByUuid(EDGE_ID, Edge.class, "date", testDate);
         connection.transact(addProp.statements);
-        Object property = helper.getProperty(edge, Edge.class, "date", Long.class);
+        Object property = helper.getPropertyByUuid(EDGE_ID, Edge.class, "date", Long.class);
         assertEquals(testDate, property);
     }
 
@@ -395,6 +463,19 @@ public class FluxHelperTest {
         List statements = helper.removeProperty(marko, Vertex.class, "age", Long.class);
         connection.transact(statements);
         Object property = helper.getProperty(marko, Vertex.class, "age", Long.class);
+        assertNull(property);
+    }
+
+    @Test
+    public void testRemovePropertyInTx() throws Exception {
+        loadTestData();
+        testAddProperty();
+        Object marko = helper.idFromUuid(MARKO_ID);
+        assertEquals(30, helper.getProperty(marko, Vertex.class, "age", Long.class));
+        List statements = helper.removePropertyByUuid(MARKO_ID, Vertex.class, "age", Long.class);
+        Object property = helper
+                .addStatements(statements)
+                .getPropertyByUuid(MARKO_ID, Vertex.class, "age", Long.class);
         assertNull(property);
     }
 

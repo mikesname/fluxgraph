@@ -21,9 +21,7 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
     }
 
     public FluxVertex(final FluxGraph fluxGraph, final Database database, final UUID uuid, final Object id) {
-        super(fluxGraph, database);
-        this.graphId = id;
-        this.uuid = uuid;
+        super(fluxGraph, database, uuid, id);
     }
 
     @Override
@@ -87,36 +85,45 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
 
     @Override
     public Iterable<Vertex> getVertices(Direction direction, String... labels) {
-        if (direction.equals(Direction.OUT)) {
-            Iterator<Edge> edgesit = this.getOutEdges(labels).iterator();
-            List<Object> vertices = new ArrayList<Object>();
-            while (edgesit.hasNext()) {
-                vertices.add(edgesit.next().getVertex(Direction.IN).getId());
+        return Iterables.transform(fluxGraph.getHelper().getVerticesByUuid(uuid, direction, labels),
+                new Function<List<Object>,
+                Vertex>() {
+            @Override
+            public Vertex apply(List<Object> objects) {
+                return new FluxVertex(fluxGraph, fluxGraph.getConnection().db(), (UUID)objects.get(1), objects.get(0));
             }
-            return new FluxIterable<Vertex>(vertices, fluxGraph, database, Vertex.class);
-        } else if (direction.equals(Direction.IN)) {
-            Iterator<Edge> edgesit = this.getInEdges(labels).iterator();
-            List<Object> vertices = new ArrayList<Object>();
-            while (edgesit.hasNext()) {
-                vertices.add(edgesit.next().getVertex(Direction.OUT).getId());
-            }
-            return new FluxIterable<Vertex>(vertices, fluxGraph, database, Vertex.class);
-        }
-        else {
-            Iterator<Edge> outEdgesIt = this.getOutEdges(labels).iterator();
-            List<Object> outvertices = new ArrayList<Object>();
-            while (outEdgesIt.hasNext()) {
-                outvertices.add(outEdgesIt.next().getVertex(Direction.IN).getId());
-            }
-            Iterator<Edge> inEdgesIt = this.getInEdges(labels).iterator();
-            List<Object> invertices = new ArrayList<Object>();
-            while (inEdgesIt.hasNext()) {
-                invertices.add(inEdgesIt.next().getVertex(Direction.OUT).getId());
-            }
-            return Iterables.concat(
-                    new FluxIterable<Vertex>(outvertices, fluxGraph, database, Vertex.class),
-                    new FluxIterable<Vertex>(invertices, fluxGraph, database, Vertex.class));
-        }
+        });
+
+//        if (direction.equals(Direction.OUT)) {
+//            Iterator<Edge> edgesit = this.getOutEdges(labels).iterator();
+//            List<Object> vertices = new ArrayList<Object>();
+//            while (edgesit.hasNext()) {
+//                vertices.add(edgesit.next().getVertex(Direction.IN).getId());
+//            }
+//            return new FluxIterable<Vertex>(vertices, fluxGraph, database, Vertex.class);
+//        } else if (direction.equals(Direction.IN)) {
+//            Iterator<Edge> edgesit = this.getInEdges(labels).iterator();
+//            List<Object> vertices = new ArrayList<Object>();
+//            while (edgesit.hasNext()) {
+//                vertices.add(edgesit.next().getVertex(Direction.OUT).getId());
+//            }
+//            return new FluxIterable<Vertex>(vertices, fluxGraph, database, Vertex.class);
+//        }
+//        else {
+//            Iterator<Edge> outEdgesIt = this.getOutEdges(labels).iterator();
+//            List<Object> outvertices = new ArrayList<Object>();
+//            while (outEdgesIt.hasNext()) {
+//                outvertices.add(outEdgesIt.next().getVertex(Direction.IN).getId());
+//            }
+//            Iterator<Edge> inEdgesIt = this.getInEdges(labels).iterator();
+//            List<Object> invertices = new ArrayList<Object>();
+//            while (inEdgesIt.hasNext()) {
+//                invertices.add(inEdgesIt.next().getVertex(Direction.OUT).getId());
+//            }
+//            return Iterables.concat(
+//                    new FluxIterable<Vertex>(outvertices, fluxGraph, database, Vertex.class),
+//                    new FluxIterable<Vertex>(invertices, fluxGraph, database, Vertex.class));
+//        }
     }
 
     @Override
@@ -169,7 +176,7 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
                 new Function<List<Object>, Edge>() {
             @Override
             public Edge apply(List<Object> input) {
-                return new FluxEdge(fluxGraph, database, (UUID)input.get(1), input.get(0));
+                return new FluxEdge(fluxGraph, database, (UUID)input.get(1), input.get(0), (String)input.get(3));
             }
         });
     }
@@ -193,7 +200,7 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
                 new Function<List<Object>, Edge>() {
             @Override
             public Edge apply(List<Object> input) {
-                return new FluxEdge(fluxGraph, database, (UUID)input.get(1), input.get(0));
+                return new FluxEdge(fluxGraph, database, (UUID)input.get(1), input.get(0), (String)input.get(3));
             }
         });
     }

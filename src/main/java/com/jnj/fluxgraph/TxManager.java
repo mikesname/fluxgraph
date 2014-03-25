@@ -1,11 +1,14 @@
 package com.jnj.fluxgraph;
 
+import clojure.lang.Keyword;
 import com.google.common.base.Function;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import datomic.Util;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Helper class for managing the mismatch between Blueprints and
@@ -28,94 +31,155 @@ final class TxManager {
 
     private static enum  OpType {
         add,
-        mod,
         del,
+        mod,
         global
     }
 
     private static class Op {
-        public final UUID uuid;
         public final OpType opType;
-        public final Object statement;
+        public Object statement;
         public final UUID[] touched;
-        public Op(UUID uuid, OpType opType, Object statement, UUID... touched) {
-            this.uuid = uuid;
+        public Op(OpType opType, Object statement, UUID... touched) {
             this.opType = opType;
             this.statement = statement;
             this.touched = touched;
         }
         public boolean concerns(UUID uuid) {
-            if (this.uuid.equals(uuid)) {
-                return true;
-            } else {
-                for (UUID t : touched) {
-                    if (t.equals(uuid)) {
-                        return true;
-                    }
+            for (UUID t : touched) {
+                if (t.equals(uuid)) {
+                    return true;
                 }
             }
             return false;
         }
     }
 
-    private final List<Op> operations;
+    private final LinkedHashMap<UUID, Op> operations;
 
     public TxManager() {
-        operations = Lists.newArrayList();
+        operations = Maps.newLinkedHashMap();
     }
 
     public List<Object> ops() {
         return Lists.newArrayList(
-                Iterables.transform(operations, new Function<Op, Object>() {
-                    @Override
-                    public Object apply(Op op) {
-                        return op.statement;
-                    }
-                }));
+                Sets.newLinkedHashSet(
+                        Iterables.transform(operations.values(), new Function<Op, Object>() {
+                            @Override
+                            public Object apply(Op op) {
+                                return op.statement;
+                            }
+                        })));
     }
 
     public boolean isAdded(final UUID uuid) {
-        for (Op op : operations) {
-            if (op.uuid.equals(uuid) && op.opType == OpType.add) {
-                return true;
-            }
-        }
-        return false;
+        Op op = operations.get(uuid);
+        return op != null && op.opType == OpType.add;
     }
 
     public void add(UUID uuid, Object statement, UUID... touched) {
-        operations.add(new Op(uuid, OpType.add, statement, touched));
+        operations.put(uuid, new Op(OpType.add, statement, touched));
     }
 
     public void mod(UUID uuid, Object statement) {
-        operations.add(new Op(uuid, OpType.mod, statement));
+        operations.put(uuid, new Op(OpType.mod, statement));
     }
 
     public void del(UUID uuid, Object statement) {
-        List<Op> filteredOps = Lists.newArrayList();
-        boolean expunge = false;
-        for (Op op : operations) {
-            if (op.concerns(uuid) && op.opType == OpType.add) {
-                expunge = true;
+        if (isAdded(uuid)) {
+            operations.remove(uuid);
+            for (Map.Entry<UUID,Op> entry : operations.entrySet()) {
+                if (entry.getValue().concerns(uuid)) {
+                    operations.remove(entry.getKey());
+                }
             }
-
-            if (!(expunge && op.concerns(uuid))) {
-                filteredOps.add(op);
-            }
-        }
-        if (expunge) {
-            operations.clear();
-            operations.addAll(filteredOps);
         } else {
-            operations.add(new Op(uuid, OpType.del, statement));
+            operations.put(uuid, new Op(OpType.del, statement));
         }
     }
 
+    public void remove(UUID uuid) {
+        if (isAdded(uuid)) {
+            operations.remove(uuid);
+            for (Map.Entry<UUID,Op> entry : operations.entrySet()) {
+                if (entry.getValue().concerns(uuid)) {
+                    operations.remove(entry.getKey());
+                }
+            }
+        } else {
+            throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
+        }
+    }
+
+    public void setProperty(UUID uuid, Keyword key, Object value) {
+        if (isAdded(uuid)) {
+            insertIntoStatement(operations.get(uuid), key, value);
+        } else {
+            throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
+        }
+    }
+
+    public void removeProperty(UUID uuid, Keyword key) {
+        if (isAdded(uuid)) {
+            removeFromStatement(operations.get(uuid), key);
+        } else {
+            throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
+        }
+    }
+
+    public Object getProperty(UUID uuid, Keyword key) {
+        if (isAdded(uuid)) {
+            return getStatementMap(operations.get(uuid)).get(key);
+        }
+        throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
+    }
+
+    public Set<String> getPropertyKeys(UUID uuid) {
+        if (isAdded(uuid)) {
+            Set<String> keys = Sets.newHashSet();
+            for (Object item : getStatementMap(operations.get(uuid)).keySet()) {
+                if (item instanceof String) {
+                    keys.add((String)item);
+                } else {
+                    keys.add(item.toString());
+                }
+            }
+            return keys;
+        }
+        throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
+    }
+
+    public Map getData(UUID uuid) {
+        if (isAdded(uuid)) {
+            return getStatementMap(operations.get(uuid));
+        }
+        throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
+    }
+
     public void global(Object statement) {
-        operations.add(new Op(GLOBAL_OP, OpType.global, statement));
+        operations.put(GLOBAL_OP, new Op(OpType.global, statement));
     }
 
     public void flush() {
         operations.clear();
+    }
+
+    private void insertIntoStatement(Op op, Keyword key, Object value) {
+        Map newMap = Maps.newHashMap(getStatementMap(op));
+        newMap.put(key, value);
+        op.statement = newMap;
+    }
+
+    private void removeFromStatement(Op op, Keyword key) {
+        Map newMap = Maps.newHashMap(getStatementMap(op));
+        newMap.remove(key);
+        op.statement = newMap;
+    }
+
+    private Map getStatementMap(Op op) {
+        if (op.statement instanceof Map) {
+            return (Map)op.statement;
+        }
+        throw new IllegalArgumentException("Statement was not a map: " + op.statement);
     }
 }

@@ -66,7 +66,7 @@ public class FluxIterable<T extends Element> implements CloseableIterable<T> {
             if (clazz == Vertex.class) {
                 ret = (T) new FluxVertex(graph, database, UUID.randomUUID(), object);
             } else if (clazz == Edge.class) {
-                ret = (T) new FluxEdge(graph, database, UUID.randomUUID(), object);
+                ret = (T) new FluxEdge(graph, database, UUID.randomUUID(), object, "NOT-AN-EDGE");
             } else {
                 throw new IllegalStateException();
             }

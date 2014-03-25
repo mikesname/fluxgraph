@@ -7,18 +7,21 @@
 
 {
     :db/id #db/id[:db.part/user -1000001]
+    :db/ident :550e8400-e29b-41d4-a716-446655440000
     :graph.element/type :graph.element.type/vertex
     :graph.element/id #uuid "550e8400-e29b-41d4-a716-446655440000"
     :name.string.vertex "Marko" }
 
 {
     :db/id #db/id[:db.part/user -1000002]
+    :db/ident :550e8400-e29b-41d4-a716-446655440001
     :graph.element/type :graph.element.type/vertex
     :graph.element/id #uuid "550e8400-e29b-41d4-a716-446655440001"
     :name.string.vertex "Stephen" }
 
 {
     :db/id #db/id[:db.part/user -1000003]
+    :db/ident :550e8400-e29b-41d4-a716-446655440002
     :graph.element/type :graph.element.type/edge
     :graph.element/id #uuid "550e8400-e29b-41d4-a716-446655440002"
     :graph.edge/label "knows"

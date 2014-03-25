@@ -1,6 +1,7 @@
 package com.jnj.fluxgraph;
 
 import clojure.lang.Keyword;
+import com.google.common.base.Optional;
 import com.tinkerpop.blueprints.TimeAwareElement;
 import datomic.Database;
 import datomic.Peer;
@@ -39,11 +40,11 @@ public class FluxUtil {
     }
 
     // Retrieve the original name of a property
-    public static String getPropertyName(final String property) {
+    public static Optional<String> getPropertyName(final String property) {
         if (property.contains(".")) {
-            return property.substring(1, property.indexOf(".")).replace("$","_");
+            return Optional.of(property.substring(1, property.indexOf(".")).replace("$", "_"));
         }
-        return null;
+        return Optional.absent();
     }
 
     // Retrieve the Datomic to for the Java equivalent
@@ -144,7 +145,10 @@ public class FluxUtil {
         for(List<Object> indexedAttribute : indexedAttributes) {
             String elementClazzName = elementClazz.getSimpleName();
             if (indexedAttribute.get(0).toString().endsWith("." + elementClazzName.toLowerCase())) {
-                results.add(getPropertyName(indexedAttribute.get(0).toString()));
+                Optional<String> propertyName = getPropertyName(indexedAttribute.get(0).toString());
+                if (propertyName.isPresent()) {
+                    results.add(propertyName.get());
+                }
             }
         }
         return results;

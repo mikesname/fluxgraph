@@ -150,8 +150,23 @@ public final class FluxHelper {
      *
      * @return An iterable of ID-UUID pairs
      */
-    public Iterator<List<Object>> listVertices() {
+    public Iterable<List<Object>> listVertices() {
         return listElements(VERTEX_TYPE);
+    }
+
+    public List<Object> getVertex(UUID id) {
+        return Peer.q("[:find ?v ?uuid :in $ $uuid :where " +
+                "[?v :graph.element/type :graph.element.type/vertex] " +
+                "[?v :graph.element/id ?uuid]]",
+                getDatabase(), id).iterator().next();
+    }
+
+    public List<Object> getEdge(UUID id) {
+        return Peer.q("[:find ?v ?uuid ?label :in $ $uuid :where " +
+                "[?v :graph.element/type :graph.element.type/edge] " +
+                "[?v :graph.element/id ?uuid] " +
+                "[?v :graph.edge/label ?label]]",
+                getDatabase(), id).iterator().next();
     }
 
     /**
@@ -160,14 +175,18 @@ public final class FluxHelper {
      *
      * @return An iterable of ID-UUID pairs
      */
-    public Iterator<List<Object>> listEdges() {
-        return listElements(EDGE_TYPE);
-    }
-
-    private Iterator<List<Object>> listElements(Keyword type) {
+    private Iterable<List<Object>> listElements(Keyword type) {
         return Peer.q("[:find ?v ?uuid :in $ ?t :where [?v :graph.element/type ?t] " +
                 "[?v :graph.element/id ?uuid]]",
-                getDatabase(), type).iterator();
+                getDatabase(), type);
+    }
+
+    public Iterable<List<Object>> listEdges() {
+        return Peer.q("[:find ?v ?uuid ?label :in $ :where " +
+                "[?v :graph.element/type :graph.element.type/edge] " +
+                "[?v :graph.element/id ?uuid] " +
+                "[?v :graph.edge/label ?label]]",
+                getDatabase());
     }
 
     /**
@@ -337,6 +356,72 @@ public final class FluxHelper {
     }
 
     /**
+     * Get all in vertices connected with a vertex.
+     *
+     * @param vertexId The vertex ID
+     * @param labels   The label(s) to follow
+     * @return An iterable of ID/Uuid pairs
+     */
+    public Iterable<List<Object>> getVerticesByUuid(UUID vertexId, Direction direction, String... labels) {
+        // NB: This is REALLY crap right now...
+        if (labels.length > 0) {
+            switch (direction) {
+                case OUT:
+                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
+                            " :in $ ?vuuid [?label ...] ?dir" +
+                            " :where [?e :graph.edge/inVertex ?other] " +
+                            " [?v :graph.element/id ?vuuid ]" +
+                            " [?e :graph.edge/outVertex ?v]" +
+                            " [?e :graph.edge/label ?label]" +
+                            " [?other :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, labels, OUT_DIRECTION);
+                case IN:
+                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
+                            " :in $ ?vuuid [?label ...] ?dir" +
+                            " :where [?e :graph.edge/outVertex ?other] " +
+                            " [?v :graph.element/id ?vuuid ]" +
+                            " [?e :graph.edge/inVertex ?v]" +
+                            " [?e :graph.edge/label ?label]" +
+                            " [?other :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, labels, IN_DIRECTION);
+                case BOTH:
+                    return Iterables.concat(
+                            getVerticesByUuid(vertexId, Direction.OUT, labels),
+                            getVerticesByUuid(vertexId, Direction.IN, labels));
+                default:
+                    throw new UnknownError("Unexpected edge direction!");
+            }
+        } else {
+            switch (direction) {
+                case OUT:
+                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
+                            " :in $ ?vuuid ?dir" +
+                            " :where [?e :graph.edge/inVertex ?other] " +
+                            " [?v :graph.element/id ?vuuid ]" +
+                            " [?e :graph.edge/outVertex ?v]" +
+                            " [?e :graph.edge/label ?label] " +
+                            " [?other :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, OUT_DIRECTION);
+                case IN:
+                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
+                            " :in $ ?vuuid ?dir" +
+                            " :where [?e :graph.edge/outVertex ?other] " +
+                            " [?v :graph.element/id ?vuuid ]" +
+                            " [?e :graph.edge/inVertex ?v]" +
+                            " [?e :graph.edge/label ?label] " +
+                            " [?other :graph.element/id ?uuid] ]",
+                            getDatabase(), vertexId, IN_DIRECTION);
+                case BOTH:
+                    return Iterables.concat(
+                            getVerticesByUuid(vertexId, Direction.OUT),
+                            getVerticesByUuid(vertexId, Direction.IN));
+                default:
+                    throw new UnknownError("Unexpected edge direction!");
+            }
+        }
+    }
+
+    /**
      * Return an ID/UUID pair for a given edge's out vertex.
      *
      * @param edge An edge ID
@@ -376,13 +461,29 @@ public final class FluxHelper {
      * @return The property value, or null if it doesn't exist
      */
     public Object getPropertyByUuid(UUID uuid, Class elementClass, String key, Class valueClass) {
-        Keyword keyword = FluxUtil.createKey(key, valueClass, elementClass);
+        Keyword keyName = FluxUtil.createKey(key, valueClass, elementClass);
         Collection<List<Object>> lists
                 = Peer.q("[:find ?p :in $ ?e ?k :where [?e ?k ?p] ]",
-                getDatabase(), Keyword.intern(uuid.toString()), keyword);
-        System.out.println(lists);
+                getDatabase(), Keyword.intern(uuid.toString()), keyName);
         Iterator<List<Object>> iterator = lists.iterator();
         return iterator.hasNext() ? iterator.next().get(0) : null;
+    }
+
+    public Object getPropertyByUuid(UUID uuid, String key) {
+        Entity entity = getDatabase().entity(Keyword.intern(uuid.toString()));
+        if (!FluxUtil.isReservedKey(key)) {
+            for(String property : entity.keySet()) {
+                String propertyName = FluxUtil.getPropertyName(property).get();
+                if (key.equals(propertyName)) {
+                    return entity.get(property);
+                }
+            }
+            // We didn't find the value
+            return null;
+        }
+        else {
+            return entity.get(key);
+        }
     }
 
     /**
@@ -396,51 +497,10 @@ public final class FluxHelper {
      */
     public Object getProperty(Object id, Class elementClass, String key, Class valueClass) {
         Keyword keyword = FluxUtil.createKey(key, valueClass, elementClass);
-        System.out.println("Finding " + id + " with " + keyword + " in " + statements);
         Collection<List<Object>> lists = Peer.q("[:find ?p :in $ ?e ?k :where [?e ?k ?p]]",
                 getDatabase(), id, keyword);
-        System.out.println(lists);
         Iterator<List<Object>> iterator = lists.iterator();
         return iterator.hasNext() ? iterator.next().get(0) : null;
-    }
-
-    public List reduce(List<Object> maps) {
-        List statements = Lists.newArrayList();
-        Map mainMap = Maps.newHashMap();
-        for (Object obj : maps) {
-            if (obj instanceof Map) {
-                mainMap.putAll((Map)obj);
-            } else {
-                statements.add(obj);
-            }
-        }
-        statements.add(mainMap);
-        return statements;
-    }
-
-    public List qMapToList(List<Object> lists) {
-        List statements = Lists.newArrayList();
-        for (Object obj : lists) {
-            if (obj instanceof Map) {
-                Map map = (Map)obj;
-                for (Object o : map.keySet()) {
-                    System.out.println("Item: " + o + " -> " + map.get(o));
-                }
-                String idKey = ":db/id";
-                Object id = map.get(idKey);
-                if (id == null) {
-                    throw new IllegalArgumentException("no :db/id found in map: " + map);
-                }
-                for (Object key : map.keySet()) {
-                    if (!key.equals(idKey)) {
-                        statements.add(Util.list(id, key, map.get(key), null));
-                    }
-                }
-            } else {
-                statements.add(obj);
-            }
-        }
-        return statements;
     }
 
     /**
@@ -458,6 +518,20 @@ public final class FluxHelper {
     }
 
     /**
+     * Add a property to an id, returning the uncommitted statements.
+     *
+     * @param uuid           The graph UUID
+     * @param elementClass The class of the element, either Vertex or Edge
+     * @param key          The property key
+     * @param value        The property value
+     * @return A set of database-altering statements, ready to be committed
+     */
+    public Addition addPropertyByUuid(UUID uuid, Class elementClass, String key, Object value) {
+        return new Addition(uuid, Util.list(Util.map(":db/id", Keyword.intern(uuid.toString()),
+                FluxUtil.createKey(key, value.getClass(), elementClass), value)));
+    }
+
+    /**
      * Remove a property from an id, returning the uncommitted statements.
      *
      * @param id           The graph internal ID
@@ -468,8 +542,31 @@ public final class FluxHelper {
      */
     public List removeProperty(Object id, Class elementClass, String key, Class valueClass) {
         Object currentValue = getProperty(id, elementClass, key, valueClass);
-        return Util.list(Util.list(":db/retract", id,
-                FluxUtil.createKey(key, valueClass, elementClass), currentValue));
+        if (currentValue != null) {
+            return Util.list(Util.list(":db/retract", id,
+                    FluxUtil.createKey(key, valueClass, elementClass), currentValue));
+        } else {
+            return Util.list();
+        }
+    }
+
+    /**
+     * Remove a property from an id, returning the uncommitted statements.
+     *
+     * @param id           The graph internal ID
+     * @param elementClass The class of the element, either Vertex or Edge
+     * @param key          The property key
+     * @param valueClass   The property's value class
+     * @return A set of database-altering statements, ready to be committed
+     */
+    public List removePropertyByUuid(UUID id, Class elementClass, String key, Class valueClass) {
+        Object currentValue = getPropertyByUuid(id, elementClass, key, valueClass);
+        if (currentValue != null) {
+            return Util.list(Util.list(":db/retract", Keyword.intern(id.toString()),
+                    FluxUtil.createKey(key, valueClass, elementClass), currentValue));
+        } else {
+            return Util.list();
+        }
     }
 
     public Set<String> getPropertyKeys(Object id) {
@@ -477,16 +574,27 @@ public final class FluxHelper {
         Set<String> filtered = Sets.newHashSet();
         for (String property : entity.keySet()) {
             if (!FluxUtil.isReservedKey(property)) {
-                filtered.add(FluxUtil.getPropertyName(property));
+                filtered.add(FluxUtil.getPropertyName(property).get());
+            }
+        }
+        return filtered;
+    }
+
+    public Set<String> getPropertyKeysByUuid(UUID id) {
+        Entity entity = getDatabase().entity(Keyword.intern(id.toString()));
+        Set<String> filtered = Sets.newHashSet();
+        for (String property : entity.keySet()) {
+            if (!FluxUtil.isReservedKey(property)) {
+                filtered.add(FluxUtil.getPropertyName(property).get());
             }
         }
         return filtered;
     }
 
     public Addition addVertex(UUID uuid) {
-        Object tempid = Peer.tempid(":graph");
-        return new Addition(tempid, Util.list(Util.map(
-                ":db/id", tempid,
+        Object tempId = Peer.tempid(":graph");
+        return new Addition(tempId, Util.list(Util.map(
+                ":db/id", tempId,
                 ":db/ident", Keyword.intern(uuid.toString()),
                 ":graph.element/type", VERTEX_TYPE,
                 ELEMENT_ID, uuid
@@ -497,6 +605,7 @@ public final class FluxHelper {
         Object tempid = Peer.tempid(":graph");
         return new Addition(tempid, Util.list(Util.map(
                 ":db/id", tempid,
+                ":db/ident", Keyword.intern(uuid.toString()),
                 ":graph.element/type", EDGE_TYPE,
                 EDGE_LABEL, label,
                 OUT_VERTEX, outVertex,

@@ -1,6 +1,8 @@
 package com.jnj.fluxgraph;
 
 import clojure.lang.Keyword;
+import com.google.common.base.Optional;
+import com.google.common.collect.Sets;
 import com.tinkerpop.blueprints.TimeAwareElement;
 import com.tinkerpop.blueprints.util.ExceptionFactory;
 import com.tinkerpop.blueprints.util.StringFactory;
@@ -24,11 +26,15 @@ public abstract class FluxElement implements TimeAwareElement {
     protected Object graphId;
 
     protected FluxElement(final FluxGraph fluxGraph, final Database database) {
+        this(fluxGraph, database, Peer.squuid(), Peer.tempid(":graph"));
+    }
+
+    protected FluxElement(final FluxGraph fluxGraph, final Database database, UUID uuid, Object graphId) {
         this.database = database;
         this.fluxGraph = fluxGraph;
         // UUID used to retrieve the actual datomic id later on
-        uuid = Peer.squuid();
-        graphId = Peer.tempid(":graph");
+        this.uuid = uuid;
+        this.graphId = graphId;
     }
 
     @Override
@@ -57,41 +63,57 @@ public abstract class FluxElement implements TimeAwareElement {
 
     @Override
     public Set<String> getPropertyKeys() {
-        if (isDeleted()) {
-            throw new IllegalArgumentException("It is not possible to get properties on a deleted element");
-        }
-        Set<String> finalProperties = new HashSet<String>();
-        for(String property : getDatabase().entity(graphId).keySet()) {
-            if (!FluxUtil.isReservedKey(property.toString())) {
-                finalProperties.add(FluxUtil.getPropertyName(property));
+//        if (isDeleted()) {
+//            throw new IllegalArgumentException("It is not possible to get properties on a deleted element");
+//        }
+//        Set<String> finalProperties = new HashSet<String>();
+//        for(String property : getDatabase().entity(graphId).keySet()) {
+//            if (!FluxUtil.isReservedKey(property.toString())) {
+//                finalProperties.add(FluxUtil.getPropertyName(property));
+//            }
+//        }
+//        return finalProperties;
+
+        TxManager txManager = fluxGraph.getTxManager();
+        if (txManager.isAdded(uuid)) {
+            Set<String> finalProperties = Sets.newHashSet();
+            for (String key : txManager.getPropertyKeys(uuid)) {
+                if (!FluxUtil.isReservedKey(key)) {
+                    Optional<String> propertyName = FluxUtil.getPropertyName(key);
+                    if (propertyName.isPresent()) {
+                        finalProperties.add(propertyName.get());
+                    }
+                }
             }
+            return finalProperties;
+        } else {
+            return fluxGraph.getHelper().getPropertyKeysByUuid(uuid);
         }
-        return finalProperties;
     }
 
     @Override
     public <T> T getProperty(final String key) {
-//        if (isDeleted()) {
-//            throw new IllegalArgumentException("It is not possible to get properties on a deleted element");
-//        }
-        if (!FluxUtil.isReservedKey(key)) {
-            // We need to iterate, as we don't know the exact type (although we ensured that only one attribute will have that name)
-            for(String property : getDatabase().entity(graphId).keySet()) {
-                String propertyname = FluxUtil.getPropertyName(property);
-                if (key.equals(propertyname)) {
-                    return (T)getDatabase().entity(graphId).get(property);
+
+        TxManager txManager = fluxGraph.getTxManager();
+        if (txManager.isAdded(uuid)) {
+            Map data = txManager.getData(uuid);
+            for (Object dataKey : data.keySet()) {
+                Optional<String> propertyName = FluxUtil.getPropertyName(dataKey.toString());
+                if (propertyName.isPresent()) {
+                    if (propertyName.get().equals(key)) {
+                        return (T)data.get(dataKey);
+                    }
                 }
             }
-            // We didn't find the value
             return null;
-        }
-        else {
-            return (T)getDatabase().entity(graphId).get(key);
+        } else {
+            return (T)fluxGraph.getHelper().getPropertyByUuid(uuid, key);
         }
     }
 
     @Override
     public void setProperty(final String key, final Object value) {
+        System.out.println("Setting property: " + key + " -> " + value);
         validate();
         if (key.equals(StringFactory.ID))
             throw ExceptionFactory.propertyKeyIdIsReserved();
@@ -99,34 +121,35 @@ public abstract class FluxElement implements TimeAwareElement {
             throw new IllegalArgumentException("Property key is reserved for all nodes and edges: " + StringFactory.LABEL);
         if (key.equals(StringFactory.EMPTY_STRING))
             throw ExceptionFactory.propertyKeyCanNotBeEmpty();
+
+        TxManager txManager = fluxGraph.getTxManager();
+
         // A user-defined property
         if (!FluxUtil.isReservedKey(key)) {
             // If the property does not exist yet, create the attribute if required and create the appropriate transaction
-            if (getProperty(key) == null) {
-                // We first need to create the new attribute on the fly
+            Keyword propKeyword = FluxUtil.createKey(key, value.getClass(), this.getClass());
+
+            boolean isAdded = txManager.isAdded(uuid);
+            if (isAdded) {
                 FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
-                fluxGraph.addToTransaction(uuid, Util.map(":db/id", graphId,
-                        FluxUtil.createKey(key, value.getClass(), this.getClass()), value));
-            }
-            else {
+                txManager.setProperty(uuid, propKeyword, value);
+            } else {
                 // Value types match, just perform an update
                 if (getProperty(key).getClass().equals(value.getClass())) {
-                    fluxGraph.addToTransaction(uuid, Util.map(":db/id", graphId,
-                            FluxUtil.createKey(key, value.getClass(), this.getClass()), value));
+                    txManager.mod(uuid, Util.map(":db/id", graphId, propKeyword, value));
                 }
                 // Value types do not match. Retract original fact and add new one
                 else {
                     FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
-                    fluxGraph.addToTransaction(uuid, Util.list(":db/retract", graphId,
-                            FluxUtil.createKey(key, value.getClass(), this.getClass()), getProperty(key)));
-                    fluxGraph.addToTransaction(uuid, Util.map(":db/id", graphId,
-                            FluxUtil.createKey(key, value.getClass(), this.getClass()), value));
+                    txManager.mod(uuid, Util.list(":db/retract", graphId, propKeyword, getProperty(key)));
+                    txManager.mod(uuid, Util.map(":db/id", graphId, propKeyword, value));
                 }
+
             }
         }
         // A datomic graph specific property
         else {
-            fluxGraph.addToTransaction(uuid, Util.map(":db/id", graphId, key, value));
+            txManager.mod(uuid, Util.map(":db/id", graphId, key, value));
         }
 
 //        if ((Long)id >= 0L) {
@@ -152,8 +175,16 @@ public abstract class FluxElement implements TimeAwareElement {
         Object oldvalue = getProperty(key);
         if (oldvalue != null) {
             if (!FluxUtil.isReservedKey(key)) {
-                fluxGraph.addToTransaction(uuid, Util.list(":db/retract", graphId,
-                                       FluxUtil.createKey(key, oldvalue.getClass(), this.getClass()), oldvalue));
+
+                Keyword propKeyword = FluxUtil.createKey(key, oldvalue.getClass(), this.getClass());
+
+                TxManager txManager = fluxGraph.getTxManager();
+
+                if (txManager.isAdded(uuid)) {
+                    txManager.removeProperty(uuid, propKeyword);
+                } else {
+                    txManager.mod(uuid, Util.list(":db/retract", graphId, propKeyword, oldvalue));
+                }
             }
         }
 //        if ((Long)id >= 0L) {

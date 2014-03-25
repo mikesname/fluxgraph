@@ -1,7 +1,9 @@
 package com.jnj.fluxgraph;
 
 import clojure.lang.ExceptionInfo;
+import com.google.common.base.Function;
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.tinkerpop.blueprints.*;
@@ -59,6 +61,10 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     public FluxHelper getHelper() {
         return new FluxHelper(connection, tx.get().ops());
+    }
+
+    public TxManager getTxManager() {
+        return tx.get();
     }
 
     private static final Features FEATURES = new Features();
@@ -163,20 +169,18 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             if (!(id instanceof UUID)) {
                 throw new IllegalArgumentException("FluxGraph id must be a UUID");
             }
-            Object graphId = getHelper().idFromUuid((UUID)id);
-            return new FluxEdge(this, this.getRawGraph(), (UUID)id, graphId);
-        } catch (NumberFormatException e) {
-            return null;
-        } catch (RuntimeException re) {
+            List<Object> data = getHelper().getEdge((UUID)id);
+            return new FluxEdge(this, this.getRawGraph(), (UUID)id, data.get(0), (String)data.get(2));
+        } catch (NoSuchElementException e) {
             return null;
         }
     }
 
-    @Override
-    public Iterable<Edge> getEdges() {
-        Iterable<Datom> edges = this.getRawGraph().datoms(Database.AVET, GRAPH_ELEMENT_TYPE, GRAPH_ELEMENT_TYPE_EDGE);
-        return new FluxIterable<Edge>(edges, this, this.getRawGraph(), Edge.class);
-    }
+//    @Override
+//    public Iterable<Edge> getEdges() {
+//        Iterable<Datom> edges = this.getRawGraph().datoms(Database.AVET, GRAPH_ELEMENT_TYPE, GRAPH_ELEMENT_TYPE_EDGE);
+//        return new FluxIterable<Edge>(edges, this, this.getRawGraph(), Edge.class);
+//    }
 
     @Override
     public Iterable<Edge> getEdges(String key, Object value) {
@@ -197,7 +201,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             FluxVertex in = (FluxVertex) inVertex;
             FluxHelper.Addition addition = getHelper().addEdge(uuid, label, out.graphId, in.graphId);
             tx.get().add(uuid, addition.statements.get(0), out.getId(), in.getId());
-            final FluxEdge edge = new FluxEdge(this, null, uuid, addition.tempId);
+            final FluxEdge edge = new FluxEdge(this, null, uuid, addition.tempId, label);
 
             // Update the transaction info of both vertices (moving up their current transaction)
 //            if ((Long)inVertex.getId() >= 0 && (Long)outVertex.getId() >= 0) {
@@ -218,6 +222,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     public TimeAwareVertex addVertex(final Object id) {
         // Create the new vertex
         UUID uuid = Peer.squuid();
+        System.out.println("Adding vertex: " + uuid);
         FluxHelper.Addition addition = getHelper().addVertex(uuid);
         tx.get().add(uuid, addition.statements.get(0));
 
@@ -234,21 +239,36 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             throw ExceptionFactory.vertexIdCanNotBeNull();
         try {
             if (!(id instanceof UUID)) {
-                throw new IllegalArgumentException("FluxGraph id must be a UUID");
+                //throw new IllegalArgumentException("FluxGraph id must be a UUID");
+                return null;
             }
-            Object graphId = getHelper().idFromUuid((UUID)id);
-
-            return new FluxVertex(this, this.getRawGraph(), (UUID)id, graphId);
-        } catch (RuntimeException re) {
+            List<Object> data = getHelper().getVertex((UUID)id);
+            return new FluxVertex(this, this.getRawGraph(), (UUID)id, data.get(0));
+        } catch (NoSuchElementException e) {
             return null;
         }
     }
 
     @Override
     public Iterable<Vertex> getVertices() {
-        Iterable<Datom> vertices = this.getRawGraph().datoms(Database.AVET, this.GRAPH_ELEMENT_TYPE,
-                this.GRAPH_ELEMENT_TYPE_VERTEX);
-        return new FluxIterable<Vertex>(vertices, this, dbWithTx(), Vertex.class);
+        final FluxGraph graph = this;
+        return Iterables.transform(getHelper().listVertices(), new Function<List<Object>, Vertex>() {
+            @Override
+            public FluxVertex apply(List<Object> o) {
+                return new FluxVertex(graph, connection.db(), (UUID)o.get(1), o.get(0));
+            }
+        });
+    }
+
+    @Override
+    public Iterable<Edge> getEdges() {
+        final FluxGraph graph = this;
+        return Iterables.transform(getHelper().listEdges(), new Function<List<Object>, Edge>() {
+            @Override
+            public FluxEdge apply(List<Object> o) {
+                return new FluxEdge(graph, connection.db(), (UUID)o.get(1), o.get(0), (String)o.get(2));
+            }
+        });
     }
 
     @Override
@@ -372,10 +392,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         return dbWithTx().asOf(transaction);
     }
 
-    public void addToTransaction(UUID id, Object o) {
-        tx.get().mod(id, o);
-    }
-
     public void transact() {
         try {
             // We are adding a fact which dates back to the past. Add the required meta data on the transaction
@@ -401,20 +417,25 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     // Ensures that add-transaction-info database function is called during the transaction execution. This will setup the linked list of transactions
     public void addTransactionInfo(TimeAwareElement... elements) {
-        for (TimeAwareElement element : elements) {
-            tx.get().mod(element.getId(), Util.list(":add-transaction-info", element.getId(), element.getTimeId()));
-        }
+//        for (TimeAwareElement element : elements) {
+//            tx.get().mod(element.getId(), Util.list(":add-transaction-info", element.getId(), element.getTimeId()));
+//        }
     }
 
     @Override
     public void removeEdge(final Edge edge) {
         // Retract the edge element in its totality
         FluxEdge theEdge =  (FluxEdge)edge;
-        tx.get().del(theEdge.getId(), Util.list(":db.fn/retractEntity", theEdge.getId()));
+        TxManager txManager = tx.get();
+        if (txManager.isAdded(theEdge.getId())) {
+            txManager.remove(theEdge.getId());
+        } else {
+            txManager.del(theEdge.getId(), Util.list(":db.fn/retractEntity", theEdge.getId()));
+        }
 
         // Get the in and out vertex (as their version also needs to be updated)
-        FluxVertex inVertex = (FluxVertex)theEdge.getVertex(Direction.IN);
-        FluxVertex outVertex = (FluxVertex)theEdge.getVertex(Direction.OUT);
+//        FluxVertex inVertex = (FluxVertex)theEdge.getVertex(Direction.IN);
+//        FluxVertex outVertex = (FluxVertex)theEdge.getVertex(Direction.OUT);
 
         // Update the transaction info of the edge and both vertices (moving up their current transaction)
 //        if ((Long)theEdge.getId() >= 0L) {
@@ -427,15 +448,18 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         FluxVertex vertex = (FluxVertex)v;
         // Retract the vertex element in its totality
         // Update the transaction info of the vertex
-        if (tx.get().isAdded(vertex.getId())) {
-            System.out.println("Removing uncommitted item from queue...");
-            tx.get().del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.getId()));
+        TxManager txManager = tx.get();
+        System.out.println("Removing: " + v.getId());
+        if (txManager.isAdded(vertex.getId())) {
+            System.out.println("Removing uncommitted item from queue... ");
+            txManager.remove(vertex.getId());
         } else {
+            System.out.println("       Removing COMMITTED item...");
             // Retrieve all edges associated with this vertex and remove them one bye one
             for (Edge edge : vertex.getEdges(Direction.BOTH)) {
                 removeEdge(edge);
             }
-            tx.get().del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.getId()));
+            txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.getId()));
         }
     }
 
