@@ -1,6 +1,7 @@
 package com.jnj.fluxgraph;
 
 import clojure.lang.ExceptionInfo;
+import clojure.lang.Keyword;
 import com.google.common.base.Function;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Iterables;
@@ -157,8 +158,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public void rollback() {
-        tx.get().global(Util.list(":abort"));
-        transact();
+        tx.get().flush();
     }
 
     @Override
@@ -167,7 +167,8 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             throw ExceptionFactory.edgeIdCanNotBeNull();
         try {
             if (!(id instanceof UUID)) {
-                throw new IllegalArgumentException("FluxGraph id must be a UUID");
+                //throw new IllegalArgumentException("FluxGraph id must be a UUID");
+                return null;
             }
             List<Object> data = getHelper().getEdge((UUID)id);
             return new FluxEdge(this, this.getRawGraph(), (UUID)id, data.get(0), (String)data.get(2));
@@ -184,7 +185,18 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public Iterable<Edge> getEdges(String key, Object value) {
-        return edgeIndex.get(key, value);
+        //return edgeIndex.get(key, value);
+        Keyword keyword = FluxUtil.createKey(key, value.getClass(), Edge.class);
+        if (key.equals("label")) {
+            keyword = Keyword.intern("graph.edge/label");
+        }
+        final FluxGraph graph = this;
+        return Iterables.transform(getHelper().listEdges(keyword, value), new Function<List<Object>, Edge>() {
+            @Override
+            public FluxEdge apply(List<Object> o) {
+                return new FluxEdge(graph, connection.db(), (UUID)o.get(1), o.get(0), (String)o.get(2));
+            }
+        });
     }
 
     @Override
@@ -194,6 +206,11 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public TimeAwareEdge addEdge(final Object id, final Vertex outVertex, final Vertex inVertex, final String label) {
+
+        if (label == null) {
+            throw ExceptionFactory.edgeLabelCanNotBeNull();
+        }
+
         // Create the new edge
         try {
             UUID uuid = Peer.squuid();
@@ -238,12 +255,16 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         if (null == id)
             throw ExceptionFactory.vertexIdCanNotBeNull();
         try {
-            if (!(id instanceof UUID)) {
-                //throw new IllegalArgumentException("FluxGraph id must be a UUID");
+            UUID uuid;
+            if (id instanceof UUID) {
+                uuid = (UUID)id;
+            //} else if (id instanceof String) {
+            //    uuid = UUID.fromString(id.toString());
+            } else {
                 return null;
             }
-            List<Object> data = getHelper().getVertex((UUID)id);
-            return new FluxVertex(this, this.getRawGraph(), (UUID)id, data.get(0));
+            List<Object> data = getHelper().getVertex(uuid);
+            return new FluxVertex(this, this.getRawGraph(), uuid, data.get(0));
         } catch (NoSuchElementException e) {
             return null;
         }
@@ -273,7 +294,15 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public Iterable<Vertex> getVertices(String key, Object value) {
-        return vertexIndex.get(key, value);
+        //return vertexIndex.get(key, value);
+        final FluxGraph graph = this;
+        Keyword keyword = FluxUtil.createKey(key, value.getClass(), Vertex.class);
+        return Iterables.transform(getHelper().listVertices(keyword, value), new Function<List<Object>, Vertex>() {
+            @Override
+            public FluxVertex apply(List<Object> o) {
+                return new FluxVertex(graph, connection.db(), (UUID)o.get(1), o.get(0));
+            }
+        });
     }
 
     @Override

@@ -128,7 +128,8 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
 
     @Override
     public String toString() {
-        return StringFactory.vertexString(this);
+        //return StringFactory.vertexString(this);
+        return "v[" + uuid + "]";
     }
 
     @Override

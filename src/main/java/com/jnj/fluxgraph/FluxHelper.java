@@ -151,7 +151,18 @@ public final class FluxHelper {
      * @return An iterable of ID-UUID pairs
      */
     public Iterable<List<Object>> listVertices() {
-        return listElements(VERTEX_TYPE);
+        return Peer.q("[:find ?v ?uuid :in $ :where " +
+                "[?v :graph.element/type :graph.element.type/vertex] " +
+                "[?v :graph.element/id ?uuid]]",
+                getDatabase());
+    }
+
+    public Iterable<List<Object>> listVertices(Keyword key, Object value) {
+        return Peer.q("[:find ?v ?uuid :in $ ?key ?val :where " +
+                "[?v :graph.element/type :graph.element.type/vertex] " +
+                "[?v :graph.element/id ?uuid]" +
+                "[?v ?key ?val]]",
+                getDatabase(), key, value);
     }
 
     public List<Object> getVertex(UUID id) {
@@ -169,24 +180,21 @@ public final class FluxHelper {
                 getDatabase(), id).iterator().next();
     }
 
-    /**
-     * Obtain an iterable of edge data, comprising a pair of the internal
-     * graph ID and the element's UUID.
-     *
-     * @return An iterable of ID-UUID pairs
-     */
-    private Iterable<List<Object>> listElements(Keyword type) {
-        return Peer.q("[:find ?v ?uuid :in $ ?t :where [?v :graph.element/type ?t] " +
-                "[?v :graph.element/id ?uuid]]",
-                getDatabase(), type);
-    }
-
     public Iterable<List<Object>> listEdges() {
         return Peer.q("[:find ?v ?uuid ?label :in $ :where " +
                 "[?v :graph.element/type :graph.element.type/edge] " +
                 "[?v :graph.element/id ?uuid] " +
                 "[?v :graph.edge/label ?label]]",
                 getDatabase());
+    }
+
+    public Iterable<List<Object>> listEdges(Keyword key, Object value) {
+        return Peer.q("[:find ?v ?uuid ?label :in $ ?key ?val :where " +
+                "[?v :graph.element/type :graph.element.type/edge] " +
+                "[?v :graph.element/id ?uuid] " +
+                "[?v :graph.edge/label ?label ]" +
+                "[?v ?key ?val]]",
+                getDatabase(), key, value);
     }
 
     /**

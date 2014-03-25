@@ -55,7 +55,7 @@ final class TxManager {
         }
     }
 
-    private final LinkedHashMap<UUID, Op> operations;
+    private LinkedHashMap<UUID, Op> operations;
 
     public TxManager() {
         operations = Maps.newLinkedHashMap();
@@ -88,11 +88,13 @@ final class TxManager {
     public void del(UUID uuid, Object statement) {
         if (isAdded(uuid)) {
             operations.remove(uuid);
+            LinkedHashMap<UUID,Op> newMap = Maps.newLinkedHashMap();
             for (Map.Entry<UUID,Op> entry : operations.entrySet()) {
-                if (entry.getValue().concerns(uuid)) {
-                    operations.remove(entry.getKey());
+                if (!entry.getValue().concerns(uuid)) {
+                    newMap.put(entry.getKey(), entry.getValue());
                 }
             }
+            operations = newMap;
         } else {
             operations.put(uuid, new Op(OpType.del, statement));
         }
@@ -101,11 +103,13 @@ final class TxManager {
     public void remove(UUID uuid) {
         if (isAdded(uuid)) {
             operations.remove(uuid);
+            LinkedHashMap<UUID,Op> newMap = Maps.newLinkedHashMap();
             for (Map.Entry<UUID,Op> entry : operations.entrySet()) {
-                if (entry.getValue().concerns(uuid)) {
-                    operations.remove(entry.getKey());
+                if (!entry.getValue().concerns(uuid)) {
+                    newMap.put(entry.getKey(), entry.getValue());
                 }
             }
+            operations = newMap;
         } else {
             throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
         }
