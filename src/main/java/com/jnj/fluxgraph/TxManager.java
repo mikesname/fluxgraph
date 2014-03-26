@@ -6,7 +6,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import datomic.Util;
 
 import java.util.*;
 
@@ -185,5 +184,9 @@ final class TxManager {
             return (Map)op.statement;
         }
         throw new IllegalArgumentException("Statement was not a map: " + op.statement);
+    }
+
+    public long size() {
+        return operations.size();
     }
 }

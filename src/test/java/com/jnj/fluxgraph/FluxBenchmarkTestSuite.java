@@ -4,6 +4,9 @@ import com.tinkerpop.blueprints.*;
 import com.tinkerpop.blueprints.impls.GraphTest;
 import com.tinkerpop.blueprints.util.io.graphml.GraphMLReader;
 
+import java.io.File;
+import java.io.FileWriter;
+
 /**
  * @author Davy Suvee (http://datablend.be)
  */
@@ -20,12 +23,30 @@ public class FluxBenchmarkTestSuite extends TestSuite {
 
     public void testDatomicGraph() throws Exception {
         double totalTime = 0.0d;
+        int bufferSize = 1000;
+        System.out.println("Testing benchmark with runs: " + TOTAL_RUNS);
         Graph graph = graphTest.generateGraph();
-        GraphMLReader.inputGraph(graph, GraphMLReader.class.getResourceAsStream("graph-example-2.xml"));
-        graph.shutdown();
+        try {
+            new GraphMLReader(graph)
+                    .inputGraph(
+                            GraphMLReader.class.getResourceAsStream("graph-example-2.xml"),
+                            bufferSize);
+            graph.shutdown();
+        } catch (Exception e) {
+            File file = new File("logdump.txt");
+            FileWriter fileWriter = new FileWriter(file);
+            try {
+                ((FluxGraph) graph).dumpPendingOps(fileWriter);
+            } catch (Exception e2) {
+                fileWriter.flush();
+                fileWriter.close();
+                throw e2;
+            }
+            throw e;
+        }
 
         for (int i = 0; i < TOTAL_RUNS; i++) {
-            graph = graphTest.generateGraph();
+            //graph = graphTest.generateGraph();
             this.stopWatch();
             int counter = 0;
             CloseableIterable<Vertex> vv = (CloseableIterable<Vertex>) graph.getVertices();

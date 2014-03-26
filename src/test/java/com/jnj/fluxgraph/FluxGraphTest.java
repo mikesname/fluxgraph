@@ -18,11 +18,11 @@ public class FluxGraphTest extends GraphTest {
 
     private FluxGraph currentGraph;
 
-    /*public void testDatomicBenchmarkTestSuite() throws Exception {
+    public void testDatomicBenchmarkTestSuite() throws Exception {
         this.stopWatch();
         doTestSuite(new FluxBenchmarkTestSuite(this));
         printTestPerformance("FluxBenchmarkTestSuite", this.stopWatch());
-    }*/
+    }
 
     public void testVertexTestSuite() throws Exception {
         this.stopWatch();
@@ -73,13 +73,13 @@ public class FluxGraphTest extends GraphTest {
     }
 
     public Graph generateGraph(String name) {
-        this.currentGraph = new FluxGraph("datomic:mem://tinkerpop" + name + UUID.randomUUID());
+        this.currentGraph = new FluxGraph("datomic:mem://tinkerpop_" + name);
         return this.currentGraph;
     }
 
     @Override
     public Graph generateGraph() {
-        return generateGraph("");
+        return generateGraph(UUID.randomUUID().toString());
     }
 
     public void doTestSuite(final TestSuite testSuite) throws Exception {

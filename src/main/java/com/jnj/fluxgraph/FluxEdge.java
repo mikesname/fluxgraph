@@ -1,5 +1,6 @@
 package com.jnj.fluxgraph;
 
+import com.google.common.base.Optional;
 import com.tinkerpop.blueprints.*;
 import com.tinkerpop.blueprints.util.ExceptionFactory;
 import com.tinkerpop.blueprints.util.StringFactory;
@@ -18,15 +19,8 @@ public class FluxEdge extends FluxElement implements TimeAwareEdge {
 
     private final String label;
 
-    public FluxEdge(final FluxGraph fluxGraph, final Database database, final String label) {
-        super(fluxGraph, database);
-        this.label = label;
-//        fluxGraph.addToTransaction(uuid, Util.map(":db/id", graphId,
-//                                               ":graph.element/type", ":graph.element.type/edge",
-//                                               ":db/ident", uuid));
-    }
-
-    public FluxEdge(final FluxGraph fluxGraph, final Database database, final UUID uuid, final Object graphId,
+    public FluxEdge(final FluxGraph fluxGraph, final Optional<Database> database, final UUID uuid,
+            final Object graphId,
             final String label) {
         super(fluxGraph, database, uuid, graphId);
         this.label = label;
@@ -38,7 +32,7 @@ public class FluxEdge extends FluxElement implements TimeAwareEdge {
         Object previousTimeId = FluxUtil.getPreviousTransaction(fluxGraph, this);
         if (previousTimeId != null) {
             // Create a new version of the edge timescoped to the previous time id
-            return new FluxEdge(fluxGraph, fluxGraph.getRawGraph(previousTimeId), uuid, graphId, label);
+            return new FluxEdge(fluxGraph, Optional.of(fluxGraph.getRawGraph(previousTimeId)), uuid, graphId, label);
         }
         return null;
     }
@@ -49,10 +43,11 @@ public class FluxEdge extends FluxElement implements TimeAwareEdge {
         Object nextTimeId = FluxUtil.getNextTransactionId(fluxGraph, this);
         if (nextTimeId != null) {
             // Create a new version of the edge timescoped to the next time id
-            FluxEdge nextVertexVersion = new FluxEdge(fluxGraph, fluxGraph.getRawGraph(nextTimeId), uuid, graphId, label);
+            FluxEdge nextVertexVersion = new FluxEdge(fluxGraph, Optional.of(fluxGraph.getRawGraph(nextTimeId)), uuid,
+                    graphId, label);
             // If no next version exists, the version of the edge is the current version (timescope with a null database)
             if (FluxUtil.getNextTransactionId(fluxGraph, nextVertexVersion) == null) {
-                return new FluxEdge(fluxGraph, null, uuid, graphId, label);
+                return new FluxEdge(fluxGraph, Optional.<Database>absent(), uuid, graphId, label);
             }
             else {
                 return nextVertexVersion;

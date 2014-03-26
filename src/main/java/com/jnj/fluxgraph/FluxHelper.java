@@ -167,14 +167,14 @@ public final class FluxHelper {
     }
 
     public List<Object> getVertex(UUID id) {
-        return Peer.q("[:find ?v ?uuid :in $ $uuid :where " +
+        return Peer.q("[:find ?v ?uuid :in $ ?uuid :where " +
                 "[?v :graph.element/type :graph.element.type/vertex] " +
                 "[?v :graph.element/id ?uuid]]",
                 getDatabase(), id).iterator().next();
     }
 
     public List<Object> getEdge(UUID id) {
-        return Peer.q("[:find ?v ?uuid ?label :in $ $uuid :where " +
+        return Peer.q("[:find ?v ?uuid ?label :in $ ?uuid :where " +
                 "[?v :graph.element/type :graph.element.type/edge] " +
                 "[?v :graph.element/id ?uuid] " +
                 "[?v :graph.edge/label ?label]]",

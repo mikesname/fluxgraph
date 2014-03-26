@@ -1,5 +1,6 @@
 package com.jnj.fluxgraph;
 
+import com.google.common.base.Optional;
 import com.tinkerpop.blueprints.*;
 import datomic.Database;
 import datomic.Datom;
@@ -64,9 +65,9 @@ public class FluxIterable<T extends Element> implements CloseableIterable<T> {
             Object object = getNext();
             T ret = null;
             if (clazz == Vertex.class) {
-                ret = (T) new FluxVertex(graph, database, UUID.randomUUID(), object);
+                ret = (T) new FluxVertex(graph, Optional.of(database), UUID.randomUUID(), object);
             } else if (clazz == Edge.class) {
-                ret = (T) new FluxEdge(graph, database, UUID.randomUUID(), object, "NOT-AN-EDGE");
+                ret = (T) new FluxEdge(graph, Optional.of(database), UUID.randomUUID(), object, "NOT-AN-EDGE");
             } else {
                 throw new IllegalStateException();
             }

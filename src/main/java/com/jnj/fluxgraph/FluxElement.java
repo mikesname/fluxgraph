@@ -20,16 +20,16 @@ import java.util.*;
  */
 public abstract class FluxElement implements TimeAwareElement {
 
-    protected final Database database;
+    protected final Optional<Database> database;
     protected final FluxGraph fluxGraph;
     protected UUID uuid;
     protected Object graphId;
 
-    protected FluxElement(final FluxGraph fluxGraph, final Database database) {
+    protected FluxElement(final FluxGraph fluxGraph, final Optional<Database> database) {
         this(fluxGraph, database, Peer.squuid(), Peer.tempid(":graph"));
     }
 
-    protected FluxElement(final FluxGraph fluxGraph, final Database database, UUID uuid, Object graphId) {
+    protected FluxElement(final FluxGraph fluxGraph, final Optional<Database> database, UUID uuid, Object graphId) {
         this.database = database;
         this.fluxGraph = fluxGraph;
         // UUID used to retrieve the actual datomic id later on
@@ -49,7 +49,7 @@ public abstract class FluxElement implements TimeAwareElement {
 
     @Override
     public boolean isCurrentVersion() {
-        return database == null;
+        return database.isPresent();
     }
 
     @Override
@@ -133,14 +133,13 @@ public abstract class FluxElement implements TimeAwareElement {
                 FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
                 txManager.setProperty(uuid, propKeyword, value);
             } else {
-                // Value types match, just perform an update
-                if (getProperty(key).getClass().equals(value.getClass())) {
+                // If there is not value, or value types match, just perform an update
+                Object existingValue = getProperty(key);
+                if (existingValue == null || existingValue.getClass().equals(value.getClass())) {
                     txManager.mod(uuid, Util.map(":db/id", graphId, propKeyword, value));
-                }
-                // Value types do not match. Retract original fact and add new one
-                else {
+                } else {
                     FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
-                    txManager.mod(uuid, Util.list(":db/retract", graphId, propKeyword, getProperty(key)));
+                    txManager.mod(uuid, Util.list(":db/retract", graphId, propKeyword, existingValue));
                     txManager.mod(uuid, Util.map(":db/id", graphId, propKeyword, value));
                 }
 
@@ -197,8 +196,7 @@ public abstract class FluxElement implements TimeAwareElement {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         FluxElement that = (FluxElement) o;
-        if (uuid != null ? !uuid.equals(that.uuid) : that.uuid != null) return false;
-        return true;
+        return !(uuid != null ? !uuid.equals(that.uuid) : that.uuid != null);
     }
 
     @Override
@@ -207,13 +205,15 @@ public abstract class FluxElement implements TimeAwareElement {
     }
 
     protected Database getDatabase() {
-        return fluxGraph.dbWithTx();
+        return database.isPresent()
+                ? database.get()
+                : fluxGraph.dbWithTx();
     }
 
     private void validate() {
-        if (!isCurrentVersion()) {
-            throw new IllegalArgumentException("It is not possible to set a property on a non-current version of the element");
-        }
+//        if (!isCurrentVersion()) {
+//            throw new IllegalArgumentException("It is not possible to set a property on a non-current version of the element");
+//        }
 //        if (isDeleted()) {
 //            throw new IllegalArgumentException("It is not possible to set a property on a deleted element");
 //        }
