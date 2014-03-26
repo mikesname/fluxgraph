@@ -1,6 +1,7 @@
 package com.jnj.fluxgraph;
 
 import clojure.lang.Keyword;
+import com.google.common.base.Optional;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -481,9 +482,11 @@ public final class FluxHelper {
         Entity entity = getDatabase().entity(Keyword.intern(uuid.toString()));
         if (!FluxUtil.isReservedKey(key)) {
             for(String property : entity.keySet()) {
-                String propertyName = FluxUtil.getPropertyName(property).get();
-                if (key.equals(propertyName)) {
-                    return entity.get(property);
+                Optional<String> propertyName = FluxUtil.getPropertyName(property);
+                if (propertyName.isPresent()) {
+                    if (key.equals(propertyName.get())) {
+                        return entity.get(property);
+                    }
                 }
             }
             // We didn't find the value

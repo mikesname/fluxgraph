@@ -54,23 +54,23 @@ public class FluxGraphTest extends GraphTest {
 //        printTestPerformance("KeyIndexableGraphTestSuite", this.stopWatch());
 //    }
 
-//    public void testGraphMLReaderTestSuite() throws Exception {
-//        this.stopWatch();
-//        doTestSuite(new GraphMLReaderTestSuite(this));
-//        printTestPerformance("GraphMLReaderTestSuite", this.stopWatch());
-//    }
-//
-//    public void testGraphSONReaderTestSuite() throws Exception {
-//        this.stopWatch();
-//        doTestSuite(new GraphSONReaderTestSuite(this));
-//        printTestPerformance("GraphSONReaderTestSuite", this.stopWatch());
-//    }
+    public void testGraphMLReaderTestSuite() throws Exception {
+        this.stopWatch();
+        doTestSuite(new GraphMLReaderTestSuite(this));
+        printTestPerformance("GraphMLReaderTestSuite", this.stopWatch());
+    }
 
-//    public void testGMLReaderTestSuite() throws Exception {
-//        this.stopWatch();
-//        doTestSuite(new GMLReaderTestSuite(this));
-//        printTestPerformance("GMLReaderTestSuite", this.stopWatch());
-//    }
+    public void testGraphSONReaderTestSuite() throws Exception {
+        this.stopWatch();
+        doTestSuite(new GraphSONReaderTestSuite(this));
+        printTestPerformance("GraphSONReaderTestSuite", this.stopWatch());
+    }
+
+    public void testGMLReaderTestSuite() throws Exception {
+        this.stopWatch();
+        doTestSuite(new GMLReaderTestSuite(this));
+        printTestPerformance("GMLReaderTestSuite", this.stopWatch());
+    }
 
     public Graph generateGraph(String name) {
         this.currentGraph = new FluxGraph("datomic:mem://tinkerpop" + name + UUID.randomUUID());

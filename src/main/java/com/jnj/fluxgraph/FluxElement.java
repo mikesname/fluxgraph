@@ -113,7 +113,6 @@ public abstract class FluxElement implements TimeAwareElement {
 
     @Override
     public void setProperty(final String key, final Object value) {
-        System.out.println("Setting property: " + key + " -> " + value);
         validate();
         if (key.equals(StringFactory.ID))
             throw ExceptionFactory.propertyKeyIdIsReserved();

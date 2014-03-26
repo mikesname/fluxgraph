@@ -166,12 +166,20 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         if (null == id)
             throw ExceptionFactory.edgeIdCanNotBeNull();
         try {
-            if (!(id instanceof UUID)) {
-                //throw new IllegalArgumentException("FluxGraph id must be a UUID");
+            UUID uuid;
+            if (id instanceof UUID) {
+                uuid = (UUID)id;
+            } else if (id instanceof String) {
+                try {
+                    uuid = UUID.fromString(id.toString());
+                } catch (IllegalArgumentException e) {
+                    return null;
+                }
+            } else {
                 return null;
             }
-            List<Object> data = getHelper().getEdge((UUID)id);
-            return new FluxEdge(this, this.getRawGraph(), (UUID)id, data.get(0), (String)data.get(2));
+            List<Object> data = getHelper().getEdge(uuid);
+            return new FluxEdge(this, this.getRawGraph(), uuid, data.get(0), (String)data.get(2));
         } catch (NoSuchElementException e) {
             return null;
         }
@@ -194,7 +202,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         return Iterables.transform(getHelper().listEdges(keyword, value), new Function<List<Object>, Edge>() {
             @Override
             public FluxEdge apply(List<Object> o) {
-                return new FluxEdge(graph, connection.db(), (UUID)o.get(1), o.get(0), (String)o.get(2));
+                return new FluxEdge(graph, connection.db(), (UUID) o.get(1), o.get(0), (String) o.get(2));
             }
         });
     }
@@ -239,7 +247,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     public TimeAwareVertex addVertex(final Object id) {
         // Create the new vertex
         UUID uuid = Peer.squuid();
-        System.out.println("Adding vertex: " + uuid);
+        //System.out.println("Adding vertex: " + uuid);
         FluxHelper.Addition addition = getHelper().addVertex(uuid);
         tx.get().add(uuid, addition.statements.get(0));
 
@@ -258,8 +266,12 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             UUID uuid;
             if (id instanceof UUID) {
                 uuid = (UUID)id;
-            //} else if (id instanceof String) {
-            //    uuid = UUID.fromString(id.toString());
+            } else if (id instanceof String) {
+                try {
+                    uuid = UUID.fromString(id.toString());
+                } catch (IllegalArgumentException e) {
+                    return null;
+                }
             } else {
                 return null;
             }
@@ -287,7 +299,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         return Iterables.transform(getHelper().listEdges(), new Function<List<Object>, Edge>() {
             @Override
             public FluxEdge apply(List<Object> o) {
-                return new FluxEdge(graph, connection.db(), (UUID)o.get(1), o.get(0), (String)o.get(2));
+                return new FluxEdge(graph, connection.db(), (UUID) o.get(1), o.get(0), (String) o.get(2));
             }
         });
     }
@@ -300,7 +312,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         return Iterables.transform(getHelper().listVertices(keyword, value), new Function<List<Object>, Vertex>() {
             @Override
             public FluxVertex apply(List<Object> o) {
-                return new FluxVertex(graph, connection.db(), (UUID)o.get(1), o.get(0));
+                return new FluxVertex(graph, connection.db(), (UUID) o.get(1), o.get(0));
             }
         });
     }
@@ -478,12 +490,9 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         // Retract the vertex element in its totality
         // Update the transaction info of the vertex
         TxManager txManager = tx.get();
-        System.out.println("Removing: " + v.getId());
         if (txManager.isAdded(vertex.getId())) {
-            System.out.println("Removing uncommitted item from queue... ");
             txManager.remove(vertex.getId());
         } else {
-            System.out.println("       Removing COMMITTED item...");
             // Retrieve all edges associated with this vertex and remove them one bye one
             for (Edge edge : vertex.getEdges(Direction.BOTH)) {
                 removeEdge(edge);

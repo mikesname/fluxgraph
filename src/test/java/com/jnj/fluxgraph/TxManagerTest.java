@@ -29,6 +29,7 @@ public class TxManagerTest {
     @Test
     public void testAdditionAndDeletionInterleaved() {
         TxManager txManager = new TxManager();
+        txManager.mod(item1, Util.list("mod"));
         assertFalse(txManager.ops().isEmpty());
     }
 
@@ -45,6 +46,7 @@ public class TxManagerTest {
     public void testIsAdded() {
         TxManager txManager = new TxManager();
         txManager.add(item1, Util.list("add"));
+        txManager.mod(item2, Util.list("mod"));
         txManager.del(item1, Util.list("del"));
         assertEquals(1L, txManager.ops().size());
 
