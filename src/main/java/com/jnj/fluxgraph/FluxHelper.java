@@ -206,9 +206,21 @@ public final class FluxHelper {
      * @throws NoSuchElementException
      */
     public Object idFromUuid(UUID uuid) throws NoSuchElementException {
-        List<Object> obj = Peer.q("[:find ?v :in $ ?uuid :where [?v :graph.element/id ?uuid]]",
-                getDatabase(), uuid).iterator().next();
-        return obj.get(0);
+        Iterator<Datom> iterator = getDatabase().datoms(Database.AVET, ELEMENT_ID, uuid).iterator();
+        if (iterator.hasNext()) {
+            return iterator.next().e();
+        } else {
+            throw new NoSuchElementException(uuid.toString());
+        }
+    }
+
+    public UUID uuidFromId(Object id) throws NoSuchElementException {
+        Iterator<Datom> iterator = getDatabase().datoms(Database.EAVT, id, ELEMENT_ID).iterator();
+        if (iterator.hasNext()) {
+            return (UUID)iterator.next().v();
+        } else {
+            throw new NoSuchElementException(id.toString());
+        }
     }
 
     /**
@@ -472,14 +484,14 @@ public final class FluxHelper {
     public Object getPropertyByUuid(UUID uuid, Class elementClass, String key, Class valueClass) {
         Keyword keyName = FluxUtil.createKey(key, valueClass, elementClass);
         Collection<List<Object>> lists
-                = Peer.q("[:find ?p :in $ ?e ?k :where [?e ?k ?p] ]",
-                getDatabase(), Keyword.intern(uuid.toString()), keyName);
+                = Peer.q("[:find ?p :in $ ?euuid ?k :where [?e ?k ?p] [?e :graph.element/id ?euuid ]]",
+                getDatabase(), uuid, keyName);
         Iterator<List<Object>> iterator = lists.iterator();
         return iterator.hasNext() ? iterator.next().get(0) : null;
     }
 
     public Object getPropertyByUuid(UUID uuid, String key) {
-        Entity entity = getDatabase().entity(Keyword.intern(uuid.toString()));
+        Entity entity = getDatabase().entity(idFromUuid(uuid));
         if (!FluxUtil.isReservedKey(key)) {
             for(String property : entity.keySet()) {
                 Optional<String> propertyName = FluxUtil.getPropertyName(property);
@@ -592,7 +604,7 @@ public final class FluxHelper {
     }
 
     public Set<String> getPropertyKeysByUuid(UUID id) {
-        Entity entity = getDatabase().entity(Keyword.intern(id.toString()));
+        Entity entity = getDatabase().entity(idFromUuid(id));
         Set<String> filtered = Sets.newHashSet();
         for (String property : entity.keySet()) {
             if (!FluxUtil.isReservedKey(property)) {
@@ -606,7 +618,6 @@ public final class FluxHelper {
         Object tempId = Peer.tempid(":graph");
         return new Addition(tempId, Util.list(Util.map(
                 ":db/id", tempId,
-                ":db/ident", Keyword.intern(uuid.toString()),
                 ":graph.element/type", VERTEX_TYPE,
                 ELEMENT_ID, uuid
         )));
@@ -616,7 +627,6 @@ public final class FluxHelper {
         Object tempid = Peer.tempid(":graph");
         return new Addition(tempid, Util.list(Util.map(
                 ":db/id", tempid,
-                ":db/ident", Keyword.intern(uuid.toString()),
                 ":graph.element/type", EDGE_TYPE,
                 EDGE_LABEL, label,
                 OUT_VERTEX, outVertex,
