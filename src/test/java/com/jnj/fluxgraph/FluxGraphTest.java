@@ -18,11 +18,11 @@ public class FluxGraphTest extends GraphTest {
 
     private FluxGraph currentGraph;
 
-    public void testDatomicBenchmarkTestSuite() throws Exception {
-        this.stopWatch();
-        doTestSuite(new FluxBenchmarkTestSuite(this));
-        printTestPerformance("FluxBenchmarkTestSuite", this.stopWatch());
-    }
+//    public void testDatomicBenchmarkTestSuite() throws Exception {
+//        this.stopWatch();
+//        doTestSuite(new FluxBenchmarkTestSuite(this));
+//        printTestPerformance("FluxBenchmarkTestSuite", this.stopWatch());
+//    }
 
     public void testVertexTestSuite() throws Exception {
         this.stopWatch();

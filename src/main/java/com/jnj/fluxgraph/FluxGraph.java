@@ -281,6 +281,17 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     @Override
     public CloseableIterable<Vertex> getVertices() {
         final FluxGraph graph = this;
+//        final Database database = dbWithTx();
+//        Iterable<Datom> vertices = this.getRawGraph().datoms(Database.AVET, this.GRAPH_ELEMENT_TYPE, this.GRAPH_ELEMENT_TYPE_VERTEX);
+//        return new WrappingCloseableIterable<Vertex>(Iterables.transform(vertices, new Function<Datom, Vertex>() {
+//            @Override
+//            public Vertex apply(Datom datom) {
+//                Object id = datom.e();
+//                UUID uuid = (UUID) database.entity(id).get(FluxHelper.ELEMENT_ID);
+//                return new FluxVertex(graph, Optional.<Database>absent(), uuid, id);
+//            }
+//        }));
+
         return new WrappingCloseableIterable<Vertex>(Iterables.transform(getHelper().listVertices(), new Function<List<Object>, Vertex>() {
             @Override
             public FluxVertex apply(List<Object> o) {
@@ -304,8 +315,9 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public CloseableIterable<Vertex> getVertices(String key, Object value) {
-        //return vertexIndex.get(key, value);
+
         final FluxGraph graph = this;
+        //return vertexIndex.get(key, value);
         Keyword keyword = FluxUtil.createKey(key, value.getClass(), Vertex.class);
         return new WrappingCloseableIterable<Vertex>(Iterables.transform(getHelper().listVertices(keyword, value), new Function<List<Object>,
                 Vertex>() {
