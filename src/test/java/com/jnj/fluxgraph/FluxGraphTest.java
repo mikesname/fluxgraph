@@ -73,8 +73,7 @@ public class FluxGraphTest extends GraphTest {
     }
 
     public Graph generateGraph(String name) {
-        this.currentGraph = new FluxGraph("datomic:mem://tinkerpop_" + name);
-        return this.currentGraph;
+        return new FluxGraph("datomic:mem://tinkerpop_" + name);
     }
 
     @Override
@@ -88,9 +87,7 @@ public class FluxGraphTest extends GraphTest {
                 System.out.println("Testing " + method.getName() + "...");
                 method.invoke(testSuite);
                 try {
-                    if (this.currentGraph != null)
-                        //this.currentGraph.clear();
-                        this.currentGraph.shutdown();
+                    this.currentGraph.shutdown();
                 } catch (Exception e) {
                 }
             }

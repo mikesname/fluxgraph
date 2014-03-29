@@ -12,7 +12,7 @@ import java.io.FileWriter;
  */
 public class FluxBenchmarkTestSuite extends TestSuite {
 
-    private static final int TOTAL_RUNS = 10;
+    private static final int TOTAL_RUNS = 1;
 
     public FluxBenchmarkTestSuite() {
     }

@@ -41,6 +41,14 @@ public class FluxHelperTest {
     public static final UUID STEPHEN_ID = UUID.fromString("550e8400-e29b-41d4-a716-446655440001");
     public static final UUID EDGE_ID = UUID.fromString("550e8400-e29b-41d4-a716-446655440002");
 
+    public FluxHelper getHelper(Connection connection) {
+        return new FluxHelper(connection);
+    }
+
+    public FluxHelper getHelper(Connection connection, List<Object> statements) {
+        return new FluxHelper(connection, statements);
+    }
+
     public Map loadDataFile(String name) throws Exception {
         URL resource = FluxHelper.class.getClassLoader().getResource(name);
         if (resource == null) {
@@ -363,7 +371,7 @@ public class FluxHelperTest {
         helper.installElementProperties(props, Vertex.class);
         Addition addProp = helper.addPropertyByUuid(MARKO_ID, Vertex.class, "age", 30);
         connection.transact(addProp.statements);
-        Object property = helper
+        Object property = getHelper(connection)
                 .getPropertyByUuid(MARKO_ID, Vertex.class, "age", Long.class);
         assertEquals(30, property);
     }
@@ -375,7 +383,7 @@ public class FluxHelperTest {
         helper.installElementProperties(props, Vertex.class);
         Addition addProp = helper.addPropertyByUuid(MARKO_ID, Vertex.class, "age", 30);
         connection.transact(addProp.statements);
-        Object property = helper
+        Object property = getHelper(connection)
                 .getPropertyByUuid(MARKO_ID, "age");
         assertEquals(30, property);
     }
@@ -451,7 +459,7 @@ public class FluxHelperTest {
         Long testDate = new Date(0).getTime();
         Addition addProp = helper.addPropertyByUuid(EDGE_ID, Edge.class, "date", testDate);
         connection.transact(addProp.statements);
-        Object property = helper.getPropertyByUuid(EDGE_ID, Edge.class, "date", Long.class);
+        Object property = getHelper(connection).getPropertyByUuid(EDGE_ID, Edge.class, "date", Long.class);
         assertEquals(testDate, property);
     }
 
@@ -459,10 +467,12 @@ public class FluxHelperTest {
     public void testRemoveProperty() throws Exception {
         loadTestData();
         testAddProperty();
+        FluxHelper helper = getHelper(connection);
         Object marko = helper.idFromUuid(MARKO_ID);
         List statements = helper.removeProperty(marko, Vertex.class, "age", Long.class);
         connection.transact(statements);
-        Object property = helper.getProperty(marko, Vertex.class, "age", Long.class);
+        Object property = getHelper(connection, statements)
+                .getProperty(marko, Vertex.class, "age", Long.class);
         assertNull(property);
     }
 
@@ -470,6 +480,7 @@ public class FluxHelperTest {
     public void testRemovePropertyInTx() throws Exception {
         loadTestData();
         testAddProperty();
+        FluxHelper helper = getHelper(connection);
         Object marko = helper.idFromUuid(MARKO_ID);
         assertEquals(30, helper.getProperty(marko, Vertex.class, "age", Long.class));
         List statements = helper.removePropertyByUuid(MARKO_ID, Vertex.class, "age", Long.class);
@@ -486,10 +497,11 @@ public class FluxHelperTest {
         Set<String> keys = helper.getPropertyKeys(marko);
         assertEquals(Sets.newHashSet("name"), keys);
         testAddProperty();
+        FluxHelper helper = getHelper(connection);
         Set<String> keys2 = helper.getPropertyKeys(marko);
         assertEquals(Sets.newHashSet("name", "age"), keys2);
         testRemoveProperty();
-        Set<String> keys3 = helper.getPropertyKeys(marko);
+        Set<String> keys3 = getHelper(connection).getPropertyKeys(marko);
         assertEquals(Sets.newHashSet("name"), keys3);
     }
 
@@ -499,10 +511,10 @@ public class FluxHelperTest {
         UUID newUuid = Peer.squuid();
         Addition addition = helper.addVertex(newUuid);
         connection.transact(addition.statements);
-        Object bob = helper.idFromUuid(newUuid);
+        Object bob = getHelper(connection).idFromUuid(newUuid);
         Addition addition2 = helper.addProperty(bob, Vertex.class, "name", "Bob");
         connection.transact(addition2.statements);
-        Set<String> keys = helper.getPropertyKeys(bob);
+        Set<String> keys = getHelper(connection).getPropertyKeys(bob);
         assertEquals(Sets.newHashSet("name"), keys);
     }
 
@@ -513,8 +525,9 @@ public class FluxHelperTest {
         Addition addition = helper.addVertex(newUuid);
         Addition addition2 = helper.addProperty(addition.tempId, Vertex.class, "name", "Bob");
         connection.transact(addition.withStatements(addition2.statements).statements);
-        Object bob = helper.idFromUuid(newUuid);
-        Set<String> keys = helper.getPropertyKeys(bob);
+        FluxHelper newHelper = getHelper(connection);
+        Object bob = newHelper.idFromUuid(newUuid);
+        Set<String> keys = newHelper.getPropertyKeys(bob);
         assertEquals(Sets.newHashSet("name"), keys);
     }
 }

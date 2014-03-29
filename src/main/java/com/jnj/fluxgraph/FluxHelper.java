@@ -10,6 +10,7 @@ import com.tinkerpop.blueprints.Direction;
 import datomic.*;
 
 import static datomic.Connection.DB_AFTER;
+import static datomic.Connection.TX_DATA;
 
 import java.io.*;
 import java.net.URL;
@@ -49,6 +50,9 @@ public final class FluxHelper {
 
     private final List<Object> statements;
 
+    private Database database;
+
+
     /**
      * Constructor.
      *
@@ -58,6 +62,11 @@ public final class FluxHelper {
     public FluxHelper(Connection connection, List<Object> statements) {
         this.connection = connection;
         this.statements = statements;
+        if (statements.isEmpty()) {
+            this.database = connection.db();
+        } else {
+            this.database = (Database)connection.db().with(statements).get(DB_AFTER);
+        }
     }
 
     /**
@@ -83,11 +92,7 @@ public final class FluxHelper {
     }
 
     private Database getDatabase() {
-        return (Database)connection.db().with(statements).get(DB_AFTER);
-    }
-
-    private Database getDatabase(List statements) {
-        return (Database)connection.db().with(statements).get(DB_AFTER);
+        return database;
     }
 
     /**
@@ -118,7 +123,9 @@ public final class FluxHelper {
         FileReader reader = new FileReader(file);
         try {
             List statements = (List) Util.readAll(reader).get(0);
-            return connection.transact(statements).get();
+            Map map = connection.transact(statements).get();
+            database = connection.db();
+            return map;
         } finally {
             reader.close();
         }
@@ -142,7 +149,9 @@ public final class FluxHelper {
                     ":db/cardinality", ":db.cardinality/one",
                     ":db.install/_attribute", ":db.part/db"));
         }
-        return connection.transact(statements).get();
+        Map map = connection.transact(statements).get();
+        database = connection.db();
+        return map;
     }
 
     /**

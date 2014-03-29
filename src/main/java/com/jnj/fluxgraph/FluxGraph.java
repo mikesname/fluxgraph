@@ -70,8 +70,14 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         }
     };
 
+    protected final ThreadLocal<FluxHelper> helper = new ThreadLocal<FluxHelper>() {
+        protected FluxHelper initialValue() {
+            return new FluxHelper(connection, tx.get().ops());
+        }
+    };
+
     public FluxHelper getHelper() {
-        return new FluxHelper(connection, tx.get().ops());
+        return helper.get();
     }
 
     public TxManager getTxManager() {
@@ -159,12 +165,14 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     @Override
     public void shutdown() {
         commit();
+        helper.remove();
     }
 
     @Override
     public void commit() {
         debugLog("Commit... tx events: " + tx.get().size());
         transact();
+        helper.remove();
     }
 
     @Override
@@ -172,6 +180,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         debugLog("Rollback... tx events: " + tx.get().size());
         tx.get().flush();
         idResolver.get().clear();
+        helper.remove();
     }
 
     @Override
@@ -230,6 +239,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 //                addTransactionInfo((TimeAwareVertex)inVertex, (TimeAwareVertex)outVertex);
 //            }
 
+            helper.remove();
             return edge;
         } catch (ExceptionInfo e) {
             if (e.toString().contains("not a valid :string for attribute")) {
@@ -250,6 +260,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         // Add to the dirty pile...
         FluxVertex vertex = new FluxVertex(this, null, uuid, addition.tempId);
         idResolver.get().put(addition.tempId, vertex);
+        helper.remove();
 
         return vertex;
     }
@@ -468,6 +479,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             Map map = connection.transact(txManager.ops()).get();
             txManager.flush();
             idResolver.get().resolveIds((Database) map.get(DB_AFTER), (Map) map.get(TEMPIDS));
+            helper.remove();
         } catch (InterruptedException e) {
             txManager.flush();
             throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE);
@@ -499,6 +511,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         } else {
             txManager.del(theEdge.getId(), Util.list(":db.fn/retractEntity", theEdge.getId()));
         }
+        helper.remove();
 
         // Get the in and out vertex (as their version also needs to be updated)
 //        FluxVertex inVertex = (FluxVertex)theEdge.getVertex(Direction.IN);
@@ -526,6 +539,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             }
             txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.getId()));
         }
+        helper.remove();
     }
 
     // Helper method to check whether the meta model of the graph still needs to be setup
