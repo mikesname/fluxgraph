@@ -233,6 +233,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             FluxHelper.Addition addition = getHelper().addEdge(uuid, label, out.graphId, in.graphId);
             tx.get().add(uuid, addition.statements.get(0), out.getId(), in.getId());
             final FluxEdge edge = new FluxEdge(this, null, uuid, addition.tempId, label);
+            idResolver.get().put(addition.tempId, edge);
 
             // Update the transaction info of both vertices (moving up their current transaction)
 //            if ((Long)inVertex.getId() >= 0 && (Long)outVertex.getId() >= 0) {
@@ -509,7 +510,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             txManager.remove(theEdge.getId());
             idResolver.get().removeElement(theEdge);
         } else {
-            txManager.del(theEdge.getId(), Util.list(":db.fn/retractEntity", theEdge.getId()));
+            txManager.del(theEdge.getId(), Util.list(":db.fn/retractEntity", theEdge.graphId));
         }
         helper.remove();
 
@@ -537,7 +538,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             for (Edge edge : vertex.getEdges(Direction.BOTH)) {
                 removeEdge(edge);
             }
-            txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.getId()));
+            txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.graphId));
         }
         helper.remove();
     }
