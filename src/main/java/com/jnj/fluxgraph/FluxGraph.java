@@ -480,10 +480,10 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             idResolver.get().resolveIds((Database) map.get(DB_AFTER), (Map) map.get(TEMPIDS));
         } catch (InterruptedException e) {
             txManager.flush();
-            throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE);
+            throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
         } catch (ExecutionException e) {
             txManager.flush();
-            throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE);
+            throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
         }
     }
 
