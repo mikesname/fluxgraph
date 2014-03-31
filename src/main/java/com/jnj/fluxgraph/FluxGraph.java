@@ -4,10 +4,8 @@ import clojure.lang.ExceptionInfo;
 import clojure.lang.Keyword;
 import com.google.common.base.Function;
 import com.google.common.base.Optional;
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Multimap;
 import com.tinkerpop.blueprints.*;
 import com.tinkerpop.blueprints.util.DefaultGraphQuery;
 import com.tinkerpop.blueprints.util.ExceptionFactory;
@@ -51,7 +49,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     protected final ThreadLocal<TxManager> tx = new ThreadLocal<TxManager>() {
         protected TxManager initialValue() {
-            return new TxManager();
+            return new TxManager(connection);
         }
     };
     protected final ThreadLocal<Long> checkpointTime = new ThreadLocal<Long>() {
@@ -70,14 +68,10 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         }
     };
 
-    protected final ThreadLocal<FluxHelper> helper = new ThreadLocal<FluxHelper>() {
-        protected FluxHelper initialValue() {
-            return new FluxHelper(connection, tx.get().ops());
-        }
-    };
+    private FluxHelper helper = new FluxHelper();
 
     public FluxHelper getHelper() {
-        return helper.get();
+        return helper;
     }
 
     public TxManager getTxManager() {
@@ -165,14 +159,12 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     @Override
     public void shutdown() {
         commit();
-        helper.remove();
     }
 
     @Override
     public void commit() {
         debugLog("Commit... tx events: " + tx.get().size());
         transact();
-        helper.remove();
     }
 
     @Override
@@ -180,7 +172,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         debugLog("Rollback... tx events: " + tx.get().size());
         tx.get().flush();
         idResolver.get().clear();
-        helper.remove();
     }
 
     @Override
@@ -200,7 +191,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             } else {
                 return null;
             }
-            List<Object> data = getHelper().getEdge(uuid);
+            List<Object> data = getHelper().getEdge(getTxManager().getDatabase(), uuid);
             return new FluxEdge(this, Optional.<Database>absent(), uuid, data.get(0), (String)data.get(2));
         } catch (NoSuchElementException e) {
             return null;
@@ -230,7 +221,8 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             UUID uuid = Peer.squuid();
             FluxVertex out = (FluxVertex) outVertex;
             FluxVertex in = (FluxVertex) inVertex;
-            FluxHelper.Addition addition = getHelper().addEdge(uuid, label, out.graphId, in.graphId);
+            FluxHelper.Addition addition = getHelper().addEdge(getTxManager().getDatabase(), uuid, label, out.graphId,
+                    in.graphId);
             tx.get().add(uuid, addition.statements.get(0), out.getId(), in.getId());
             final FluxEdge edge = new FluxEdge(this, null, uuid, addition.tempId, label);
             idResolver.get().put(addition.tempId, edge);
@@ -240,7 +232,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 //                addTransactionInfo((TimeAwareVertex)inVertex, (TimeAwareVertex)outVertex);
 //            }
 
-            helper.remove();
             return edge;
         } catch (ExceptionInfo e) {
             if (e.toString().contains("not a valid :string for attribute")) {
@@ -255,13 +246,12 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     public TimeAwareVertex addVertex(final Object id) {
         // Create the new vertex
         UUID uuid = Peer.squuid();
-        FluxHelper.Addition addition = getHelper().addVertex(uuid);
+        FluxHelper.Addition addition = getHelper().addVertex(getTxManager().getDatabase(), uuid);
         tx.get().add(uuid, addition.statements.get(0));
 
         // Add to the dirty pile...
         FluxVertex vertex = new FluxVertex(this, null, uuid, addition.tempId);
         idResolver.get().put(addition.tempId, vertex);
-        helper.remove();
 
         return vertex;
     }
@@ -283,7 +273,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             } else {
                 return null;
             }
-            List<Object> data = getHelper().getVertex(uuid);
+            List<Object> data = getHelper().getVertex(getTxManager().getDatabase(), uuid);
             return new FluxVertex(this, Optional.<Database>absent(), uuid, data.get(0));
         } catch (NoSuchElementException e) {
             return null;
@@ -304,7 +294,9 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 //            }
 //        }));
 
-        return new WrappingCloseableIterable<Vertex>(Iterables.transform(getHelper().listVertices(), new Function<List<Object>, Vertex>() {
+        return new WrappingCloseableIterable<Vertex>(Iterables.transform(getHelper().listVertices(getTxManager()
+                .getDatabase()),
+                new Function<List<Object>, Vertex>() {
             @Override
             public FluxVertex apply(List<Object> o) {
                 return new FluxVertex(graph, Optional.<Database>absent(), (UUID)o.get(1), o.get(0));
@@ -315,7 +307,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     @Override
     public CloseableIterable<Edge> getEdges() {
         final FluxGraph graph = this;
-        return new WrappingCloseableIterable<Edge>(Iterables.transform(getHelper().listEdges(),
+        return new WrappingCloseableIterable<Edge>(Iterables.transform(getHelper().listEdges(getTxManager().getDatabase()),
                 new Function<List<Object>,
                         Edge>() {
                     @Override
@@ -331,7 +323,9 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         final FluxGraph graph = this;
         //return vertexIndex.get(key, value);
         Keyword keyword = FluxUtil.createKey(key, value.getClass(), Vertex.class);
-        return new WrappingCloseableIterable<Vertex>(Iterables.transform(getHelper().listVertices(keyword, value), new Function<List<Object>,
+        return new WrappingCloseableIterable<Vertex>(Iterables.transform(getHelper().listVertices(getTxManager()
+                .getDatabase(), keyword, value),
+                new Function<List<Object>,
                 Vertex>() {
             @Override
             public FluxVertex apply(List<Object> o) {
@@ -348,7 +342,11 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             keyword = Keyword.intern("graph.edge/label");
         }
         final FluxGraph graph = this;
-        return new WrappingCloseableIterable<Edge>(Iterables.transform(getHelper().listEdges(keyword, value), new Function<List<Object>, Edge>() {
+        return new WrappingCloseableIterable<Edge>(Iterables.transform(getHelper().listEdges(getTxManager()
+                .getDatabase(),
+                keyword,
+                value),
+                new Function<List<Object>, Edge>() {
             @Override
             public FluxEdge apply(List<Object> o) {
                 return new FluxEdge(graph, Optional.<Database>absent(), (UUID) o.get(1), o.get(0), (String) o.get(2));
@@ -369,7 +367,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         Long transaction = null;
         // Retrieve the transactions
         for (List<Object> txobject : (Peer.q("[:find ?tx ?when " +
-                ":where [?tx :db/txInstant ?when]]", dbWithTx().asOf(date)))) {
+                ":where [?tx :db/txInstant ?when]]", getRawGraph(date)))) {
             Long transactionid = (Long) txobject.get(0);
             if (transaction == null) {
                 transaction = transactionid;
@@ -480,7 +478,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             Map map = connection.transact(txManager.ops()).get();
             txManager.flush();
             idResolver.get().resolveIds((Database) map.get(DB_AFTER), (Map) map.get(TEMPIDS));
-            helper.remove();
         } catch (InterruptedException e) {
             txManager.flush();
             throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE);
@@ -512,7 +509,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         } else {
             txManager.del(theEdge.getId(), Util.list(":db.fn/retractEntity", theEdge.graphId));
         }
-        helper.remove();
 
         // Get the in and out vertex (as their version also needs to be updated)
 //        FluxVertex inVertex = (FluxVertex)theEdge.getVertex(Direction.IN);
@@ -540,7 +536,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             }
             txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.graphId));
         }
-        helper.remove();
     }
 
     // Helper method to check whether the meta model of the graph still needs to be setup
@@ -552,9 +547,9 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     }
 
     // Setup of the various attribute types required for FluxGraph
-    protected void setupMetaModel() throws ExecutionException, InterruptedException, Exception {
+    protected void setupMetaModel() throws Exception {
 
-        getHelper().loadMetaModel();
+        getHelper().loadMetaModel(connection);
 
 //        tx.get().global(datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant",
 //                new Date(0)));

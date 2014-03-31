@@ -6,6 +6,9 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import datomic.Connection;
+import datomic.Database;
+import datomic.Util;
 
 import java.util.*;
 
@@ -54,10 +57,33 @@ final class TxManager {
         }
     }
 
+    private Connection connection;
     private LinkedHashMap<UUID, Op> operations;
 
-    public TxManager() {
+    private Database database = null;
+
+    public TxManager(Connection connection) {
+        this.connection = connection;
         operations = Maps.newLinkedHashMap();
+    }
+
+    public Database getDatabase() {
+        if (database == null) {
+            database = (Database)connection.db().with(ops()).get(Connection.DB_AFTER);
+            return database;
+        } else {
+            return database;
+        }
+    }
+
+    private void setDirty() {
+        database = null;
+    }
+
+    private void appendOp(Object statement) {
+//        this.database = (Database)database
+//                .with(Util.list(statement)).get(Connection.DB_AFTER);
+        setDirty();
     }
 
     public List<Object> ops() {
@@ -78,10 +104,12 @@ final class TxManager {
 
     public void add(UUID uuid, Object statement, UUID... touched) {
         operations.put(uuid, new Op(OpType.add, statement, touched));
+        appendOp(statement);
     }
 
     public void mod(UUID uuid, Object statement) {
         operations.put(uuid, new Op(OpType.mod, statement));
+        appendOp(statement);
     }
 
     public void del(UUID uuid, Object statement) {
@@ -94,8 +122,10 @@ final class TxManager {
                 }
             }
             operations = newMap;
+            setDirty();
         } else {
             operations.put(uuid, new Op(OpType.del, statement));
+            appendOp(statement);
         }
     }
 
@@ -109,6 +139,7 @@ final class TxManager {
                 }
             }
             operations = newMap;
+            setDirty();
         } else {
             throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
         }
@@ -117,6 +148,7 @@ final class TxManager {
     public void setProperty(UUID uuid, Keyword key, Object value) {
         if (isAdded(uuid)) {
             insertIntoStatement(operations.get(uuid), key, value);
+            setDirty();
         } else {
             throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
         }
@@ -125,6 +157,7 @@ final class TxManager {
     public void removeProperty(UUID uuid, Keyword key) {
         if (isAdded(uuid)) {
             removeFromStatement(operations.get(uuid), key);
+            setDirty();
         } else {
             throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
         }
@@ -161,10 +194,12 @@ final class TxManager {
 
     public void global(Object statement) {
         operations.put(GLOBAL_OP, new Op(OpType.global, statement));
+        appendOp(statement);
     }
 
     public void flush() {
         operations.clear();
+        setDirty();
     }
 
     private void insertIntoStatement(Op op, Keyword key, Object value) {

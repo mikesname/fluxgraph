@@ -79,10 +79,10 @@ public class FluxEdge extends FluxElement implements TimeAwareEdge {
     @Override
     public TimeAwareVertex getVertex(Direction direction) throws IllegalArgumentException {
         if (direction.equals(Direction.OUT)) {
-            List<Object> outVertex = fluxGraph.getHelper().getOutVertex(uuid);
+            List<Object> outVertex = fluxGraph.getHelper().getOutVertex(getDatabase(), uuid);
             return new FluxVertex(fluxGraph, database, (UUID)outVertex.get(1), outVertex.get(0));
         } else if (direction.equals(Direction.IN)) {
-            List<Object> inVertex = fluxGraph.getHelper().getInVertex(uuid);
+            List<Object> inVertex = fluxGraph.getHelper().getInVertex(getDatabase(), uuid);
             return new FluxVertex(fluxGraph, database, (UUID)inVertex.get(1), inVertex.get(0));
         } else {
             throw ExceptionFactory.bothIsNotSupported();

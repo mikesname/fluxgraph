@@ -86,7 +86,9 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
 
     @Override
     public Iterable<Vertex> getVertices(Direction direction, String... labels) {
-        return Iterables.transform(fluxGraph.getHelper().getVerticesByUuid(uuid, direction, labels),
+        return Iterables.transform(fluxGraph.getHelper().getVerticesByUuid(getDatabase(),
+                uuid, direction,
+                labels),
                 new Function<List<Object>,
                 Vertex>() {
             @Override
@@ -134,7 +136,7 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
     }
 
     private CloseableIterable<Edge> getInEdges(final String... labels) {
-        return new WrappingCloseableIterable<Edge>(Iterables.transform(fluxGraph.getHelper().getEdges(uuid, Direction.IN, labels),
+        return new WrappingCloseableIterable<Edge>(Iterables.transform(fluxGraph.getHelper().getEdges(getDatabase(), uuid, Direction.IN, labels),
                 new Function<List<Object>, Edge>() {
             @Override
             public Edge apply(List<Object> input) {
@@ -149,7 +151,7 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
 //    }
 
     private CloseableIterable<Edge> getOutEdges(final String... labels) {
-        return new WrappingCloseableIterable<Edge>(Iterables.transform(fluxGraph.getHelper().getEdges(uuid, Direction.OUT, labels),
+        return new WrappingCloseableIterable<Edge>(Iterables.transform(fluxGraph.getHelper().getEdges(getDatabase(), uuid, Direction.OUT, labels),
                 new Function<List<Object>, Edge>() {
             @Override
             public Edge apply(List<Object> input) {

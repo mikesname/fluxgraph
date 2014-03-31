@@ -18,7 +18,7 @@ public class FluxGraphTest extends GraphTest {
 
     private FluxGraph currentGraph;
 
-//    public void testDatomicBenchmarkTestSuite() throws Exception {
+//    public void testFluxBenchmarkTestSuite() throws Exception {
 //        this.stopWatch();
 //        doTestSuite(new FluxBenchmarkTestSuite(this));
 //        printTestPerformance("FluxBenchmarkTestSuite", this.stopWatch());

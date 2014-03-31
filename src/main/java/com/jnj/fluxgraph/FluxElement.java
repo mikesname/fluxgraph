@@ -87,7 +87,7 @@ public abstract class FluxElement implements TimeAwareElement {
             }
             return finalProperties;
         } else {
-            return fluxGraph.getHelper().getPropertyKeysByUuid(uuid);
+            return fluxGraph.getHelper().getPropertyKeysByUuid(getDatabase(), uuid);
         }
     }
 

@@ -123,7 +123,7 @@ public class FluxGraphSpecificTest {
                 .getVertices(Direction.OUT, "knows").iterator().next());
     }
 
-    private int treeBranchSize = 11;
+    private int treeBranchSize = 5;
 
     @Test
     public void testTreeConnectivity() {
