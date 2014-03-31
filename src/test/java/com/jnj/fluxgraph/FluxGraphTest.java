@@ -36,6 +36,18 @@ public class FluxGraphTest extends GraphTest {
         printTestPerformance("VertexTestSuite", this.stopWatch());
     }
 
+    public void testVertexQueryTestSuite() throws Exception {
+        this.stopWatch();
+        doTestSuite(new VertexQueryTestSuite(this));
+        printTestPerformance("VertexQueryTestSuite", this.stopWatch());
+    }
+
+    public void testGraphQueryTestSuite() throws Exception {
+        this.stopWatch();
+        doTestSuite(new GraphQueryTestSuite(this));
+        printTestPerformance("GraphQueryTestSuite", this.stopWatch());
+    }
+
     public void testEdgeTestSuite() throws Exception {
         this.stopWatch();
         doTestSuite(new EdgeTestSuite(this));
