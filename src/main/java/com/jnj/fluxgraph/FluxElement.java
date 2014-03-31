@@ -94,6 +94,7 @@ public abstract class FluxElement implements TimeAwareElement {
     @Override
     public <T> T getProperty(final String key) {
 
+        FluxUtil.getPropertyName(key);
         TxManager txManager = fluxGraph.getTxManager();
         if (txManager.isAdded(uuid)) {
             Map data = txManager.getData(uuid);
@@ -107,7 +108,25 @@ public abstract class FluxElement implements TimeAwareElement {
             }
             return null;
         } else {
-            return (T)fluxGraph.getHelper().getPropertyByUuid(uuid, key);
+            if (!FluxUtil.isReservedKey(key)) {
+                for (String property : getDatabase().entity(graphId).keySet()) {
+                    Optional<String> propertyName = FluxUtil.getPropertyName(property);
+                    if (propertyName.isPresent() && key.equals(propertyName.get())) {
+                        Collection<List<Object>> q = Peer.q("[:find ?v :in $ ?e ?p :where [?e ?p ?v]]", getDatabase(),
+                                graphId, Keyword.intern(property.substring(1)));
+                        if (q.size() == 0) {
+                            return null;
+                        } else {
+                            return (T)q.iterator().next().get(0);
+                        }
+                    }
+                }
+                // We didn't find the value
+                return null;
+            }
+            else {
+                return (T)getDatabase().entity(graphId).get(key);
+            }
         }
     }
 
@@ -128,9 +147,9 @@ public abstract class FluxElement implements TimeAwareElement {
             // If the property does not exist yet, create the attribute if required and create the appropriate transaction
             Keyword propKeyword = FluxUtil.createKey(key, value.getClass(), this.getClass());
 
+            FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
             boolean isAdded = txManager.isAdded(uuid);
             if (isAdded) {
-                FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
                 txManager.setProperty(uuid, propKeyword, value);
             } else {
                 // If there is not value, or value types match, just perform an update
@@ -205,7 +224,7 @@ public abstract class FluxElement implements TimeAwareElement {
     }
 
     protected Database getDatabase() {
-        return database.isPresent()
+        return (database != null && database.isPresent())
                 ? database.get()
                 : fluxGraph.dbWithTx();
     }
