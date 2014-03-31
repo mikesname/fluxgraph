@@ -92,7 +92,11 @@ public final class FluxHelper {
     }
 
     private Database getDatabase() {
-        return database;
+        if (statements.isEmpty()) {
+            return connection.db();
+        } else {
+            return (Database)connection.db().with(statements).get(DB_AFTER);
+        }
     }
 
     /**

@@ -24,6 +24,12 @@ public class FluxGraphTest extends GraphTest {
 //        printTestPerformance("FluxBenchmarkTestSuite", this.stopWatch());
 //    }
 
+    public void testTransactionalGraphTestSuite() throws Exception {
+        this.stopWatch();
+        doTestSuite(new TransactionalGraphTestSuite(this));
+        printTestPerformance("TransactionalGraphTestSuite", this.stopWatch());
+    }
+
     public void testVertexTestSuite() throws Exception {
         this.stopWatch();
         doTestSuite(new VertexTestSuite(this));

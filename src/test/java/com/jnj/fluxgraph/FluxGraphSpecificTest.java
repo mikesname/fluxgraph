@@ -3,7 +3,9 @@ package com.jnj.fluxgraph;
 import com.google.common.collect.Iterables;
 import com.tinkerpop.blueprints.Direction;
 import com.tinkerpop.blueprints.Edge;
+import com.tinkerpop.blueprints.TransactionalGraph;
 import com.tinkerpop.blueprints.Vertex;
+import junit.framework.Assert;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -71,11 +73,27 @@ public class FluxGraphSpecificTest {
     }
 
     @Test
+    public void testRemoveEdge() throws Exception {
+        Vertex v1 = graph.addVertex(null);
+        Vertex v2 = graph.addVertex(null);
+        Edge edge = v1.addEdge("test", v2);
+        assertEquals(1L, Iterables.size(graph.getEdges()));
+        assertEquals(v1.getId(), edge.getVertex(Direction.OUT).getId());
+        assertEquals(v2.getId(), edge.getVertex(Direction.IN).getId());
+        graph.commit();
+        graph.removeEdge(edge);
+        assertEquals(0L, Iterables.size(graph.getEdges()));
+    }
+
+    @Test
     public void testAddProperties() throws Exception {
         Vertex v1 = graph.addVertex(null);
         v1.setProperty("foo", "bar");
-
         assertEquals("bar", v1.getProperty("foo"));
+        graph.commit();
+
+        v1.setProperty("bar", "baz");
+        assertEquals("baz", v1.getProperty("bar"));
     }
 
     @Test
