@@ -6,6 +6,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.tinkerpop.blueprints.Direction;
+import com.tinkerpop.blueprints.util.ExceptionFactory;
 import datomic.*;
 
 import java.io.*;
@@ -176,7 +177,7 @@ public final class FluxHelper {
     public UUID uuidFromId(Database db, Object id) throws NoSuchElementException {
         Iterator<Datom> iterator = db.datoms(Database.EAVT, id, ELEMENT_ID).iterator();
         if (iterator.hasNext()) {
-            return (UUID)iterator.next().v();
+            return (UUID) iterator.next().v();
         } else {
             throw new NoSuchElementException(id.toString());
         }
@@ -224,55 +225,34 @@ public final class FluxHelper {
      * @return An iterable of ID/Uuid edge pairs
      */
     public Iterable<List<Object>> getEdges(Database db, UUID vertexId, Direction direction, String... labels) {
-        if (labels.length > 0) {
-            switch (direction) {
-                case OUT:
-                    return Peer.q("[:find ?e ?uuid ?dir ?label" +
-                            " :in $ ?vuuid [?label ...] ?dir" +
-                            " :where [?v :graph.element/id ?vuuid] " +
-                            " [?e :graph.edge/outVertex ?v]" +
-                            " [?e :graph.edge/label ?label]" +
-                            " [?e :graph.element/id ?uuid] ]",
-                            db, vertexId, labels, OUT_DIRECTION);
-                case IN:
-                    return Peer.q("[:find ?e ?uuid ?dir ?label" +
-                            " :in $ ?vuuid [?label ...] ?dir" +
-                            " :where [?v :graph.element/id ?vuuid] " +
-                            " [?e :graph.edge/inVertex ?v] " +
-                            " [?e :graph.edge/label ?label]" +
-                            " [?e :graph.element/id ?uuid] ]",
-                            db, vertexId, labels, IN_DIRECTION);
-                case BOTH:
-                    return Iterables.concat(
-                            getEdges(db, vertexId, Direction.OUT, labels), getEdges(db, vertexId, Direction.IN,
-                            labels));
-                default:
-                    throw new UnknownError("Unexpected edge direction!");
-            }
-        } else {
-            switch (direction) {
-                case OUT:
-                    return Peer.q("[:find ?e ?uuid ?dir ?label" +
-                            " :in $ ?vuuid ?dir" +
-                            " :where [?v :graph.element/id ?vuuid] " +
-                            " [?e :graph.edge/outVertex ?v] " +
-                            " [?e :graph.edge/label ?label]" +
-                            " [?e :graph.element/id ?uuid] ]",
-                            db, vertexId, OUT_DIRECTION);
-                case IN:
-                    return Peer.q("[:find ?e ?uuid ?dir ?label" +
-                            " :in $ ?vuuid ?dir" +
-                            " :where [?v :graph.element/id ?vuuid] " +
-                            " [?e :graph.edge/inVertex ?v] " +
-                            " [?e :graph.edge/label ?label]" +
-                            " [?e :graph.element/id ?uuid] ]",
-                            db, vertexId, IN_DIRECTION);
-                case BOTH:
-                    return Iterables.concat(
-                            getEdges(db, vertexId, Direction.OUT), getEdges(db, vertexId, Direction.IN));
-                default:
-                    throw new UnknownError("Unexpected edge direction!");
-            }
+        switch (direction) {
+            case OUT:
+            case IN:
+                return edgeQuery(db, vertexId, directionKeyword(direction), labels);
+            default:
+                return Iterables.concat(
+                        getEdges(db, vertexId, Direction.OUT, labels),
+                        getEdges(db, vertexId, Direction.IN, labels));
+        }
+    }
+
+    private Collection<List<Object>> edgeQuery(Database db, UUID vertexId, Keyword dir, String... labels) {
+        // NB: Ugly programmatic query building necessary for label clause because
+        // no labels with otherwise return no results.
+        return Peer.q("[:find ?e ?uuid ?dir ?label" +
+                " :in $ ?vuuid ?dir " + (labels.length > 0 ? "[?label ...] " : "") +
+                " :where [?v :graph.element/id ?vuuid] " +
+                " [?e ?dir ?v]" +
+                " [?e :graph.edge/label ?label]" +
+                " [?e :graph.element/id ?uuid] ]",
+                db, vertexId, dir, labels);
+    }
+
+    private Keyword directionKeyword(Direction direction) {
+        switch (direction) {
+            case OUT: return OUT_VERTEX;
+            case IN: return IN_VERTEX;
+            default: throw ExceptionFactory.bothIsNotSupported();
         }
     }
 
@@ -285,55 +265,26 @@ public final class FluxHelper {
      */
     public Iterable<List<Object>> getVertices(Database db, Object vertexId, Direction direction, String... labels) {
         // NB: This is REALLY crap right now...
-        if (labels.length > 0) {
-            switch (direction) {
-                case OUT:
-                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
-                            " :in $ ?v [?label ...] ?dir" +
-                            " :where [?e :graph.edge/inVertex ?other] " +
-                            " [?e :graph.edge/outVertex ?v]" +
-                            " [?e :graph.edge/label ?label]" +
-                            " [?other :graph.element/id ?uuid] ]",
-                            db, vertexId, labels, OUT_DIRECTION);
-                case IN:
-                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
-                                    " :in $ ?v [?label ...] ?dir" +
-                                    " :where [?e :graph.edge/outVertex ?other] " +
-                                    " [?e :graph.edge/inVertex ?v]" +
-                                    " [?e :graph.edge/label ?label]" +
-                                    " [?other :graph.element/id ?uuid] ]",
-                            db, vertexId, labels, IN_DIRECTION);
-                case BOTH:
-                    return Iterables.concat(
-                            getInVertices(db, vertexId), getOutVertices(db, vertexId));
-                default:
-                    throw new UnknownError("Unexpected edge direction!");
-            }
-        } else {
-            switch (direction) {
-                case OUT:
-                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
-                            " :in $ ?v ?dir" +
-                            " :where [?e :graph.edge/inVertex ?other] " +
-                            " [?e :graph.edge/outVertex ?v]" +
-                            " [?e :graph.edge/label ?label] " +
-                            " [?other :graph.element/id ?uuid] ]",
-                            db, vertexId, OUT_DIRECTION);
-                case IN:
-                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
-                            " :in $ ?v ?dir" +
-                            " :where [?e :graph.edge/outVertex ?other] " +
-                            " [?e :graph.edge/inVertex ?v]" +
-                            " [?e :graph.edge/label ?label] " +
-                            " [?other :graph.element/id ?uuid] ]",
-                            db, vertexId, IN_DIRECTION);
-                case BOTH:
-                    return Iterables.concat(
-                            getInVertices(db, vertexId), getOutVertices(db, vertexId));
-                default:
-                    throw new UnknownError("Unexpected edge direction!");
-            }
+        switch (direction) {
+            case OUT:
+            case IN:
+                return vertexQuery(db, vertexId,
+                        directionKeyword(direction), directionKeyword(direction.opposite()), labels);
+            default:
+                return Iterables.concat(
+                        getInVertices(db, vertexId), getOutVertices(db, vertexId));
         }
+    }
+
+    private Collection<List<Object>> vertexQuery(Database db, Object vertexId, Keyword dir1, Keyword dir2,
+            String... labels) {
+        return Peer.q("[:find ?other ?uuid ?dir1 ?label" +
+                " :in $ ?v ?dir1 ?dir2 " + (labels.length > 0 ? "[?label ...] " : "") +
+                " :where [?e ?dir2 ?other] " +
+                " [?e ?dir1 ?v]" +
+                " [?e :graph.edge/label ?label]" +
+                " [?other :graph.element/id ?uuid] ]",
+                db, vertexId, dir1, dir2, labels);
     }
 
     /**
@@ -345,62 +296,28 @@ public final class FluxHelper {
      */
     public Iterable<List<Object>> getVerticesByUuid(Database db, UUID vertexId, Direction direction,
             String... labels) {
-        // NB: This is REALLY crap right now...
-        if (labels.length > 0) {
-            switch (direction) {
-                case OUT:
-                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
-                            " :in $ ?vuuid [?label ...] ?dir" +
-                            " :where [?e :graph.edge/inVertex ?other] " +
-                            " [?v :graph.element/id ?vuuid ]" +
-                            " [?e :graph.edge/outVertex ?v]" +
-                            " [?e :graph.edge/label ?label]" +
-                            " [?other :graph.element/id ?uuid] ]",
-                            db, vertexId, labels, OUT_DIRECTION);
-                case IN:
-                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
-                            " :in $ ?vuuid [?label ...] ?dir" +
-                            " :where [?e :graph.edge/outVertex ?other] " +
-                            " [?v :graph.element/id ?vuuid ]" +
-                            " [?e :graph.edge/inVertex ?v]" +
-                            " [?e :graph.edge/label ?label]" +
-                            " [?other :graph.element/id ?uuid] ]",
-                            db, vertexId, labels, IN_DIRECTION);
-                case BOTH:
-                    return Iterables.concat(
-                            getVerticesByUuid(db, vertexId, Direction.OUT, labels),
-                            getVerticesByUuid(db, vertexId, Direction.IN, labels));
-                default:
-                    throw new UnknownError("Unexpected edge direction!");
-            }
-        } else {
-            switch (direction) {
-                case OUT:
-                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
-                            " :in $ ?vuuid ?dir" +
-                            " :where [?e :graph.edge/inVertex ?other] " +
-                            " [?v :graph.element/id ?vuuid ]" +
-                            " [?e :graph.edge/outVertex ?v]" +
-                            " [?e :graph.edge/label ?label] " +
-                            " [?other :graph.element/id ?uuid] ]",
-                            db, vertexId, OUT_DIRECTION);
-                case IN:
-                    return Peer.q("[:find ?other ?uuid ?dir ?label" +
-                            " :in $ ?vuuid ?dir" +
-                            " :where [?e :graph.edge/outVertex ?other] " +
-                            " [?v :graph.element/id ?vuuid ]" +
-                            " [?e :graph.edge/inVertex ?v]" +
-                            " [?e :graph.edge/label ?label] " +
-                            " [?other :graph.element/id ?uuid] ]",
-                            db, vertexId, IN_DIRECTION);
-                case BOTH:
-                    return Iterables.concat(
-                            getVerticesByUuid(db, vertexId, Direction.OUT),
-                            getVerticesByUuid(db, vertexId, Direction.IN));
-                default:
-                    throw new UnknownError("Unexpected edge direction!");
-            }
+        switch (direction) {
+            case OUT:
+            case IN:
+                return vertexQueryFromUuid(db, vertexId, directionKeyword(direction),
+                        directionKeyword(direction.opposite()), labels);
+            default:
+                return Iterables.concat(
+                        getVerticesByUuid(db, vertexId, Direction.OUT, labels),
+                        getVerticesByUuid(db, vertexId, Direction.IN, labels));
         }
+    }
+
+    private Collection<List<Object>> vertexQueryFromUuid(Database db, UUID vertexId, Keyword dir1,
+            Keyword dir2, String... labels) {
+        return Peer.q("[:find ?other ?uuid ?dir1 ?label" +
+                " :in $ ?vuuid ?dir1 ?dir2 " + (labels.length > 0 ? "[?label ...] " : "") +
+                " :where [?e ?dir2 ?other] " +
+                " [?v :graph.element/id ?vuuid ]" +
+                " [?e ?dir1 ?v]" +
+                " [?e :graph.edge/label ?label]" +
+                " [?other :graph.element/id ?uuid] ]",
+                db, vertexId, dir1, dir2, labels);
     }
 
     /**
@@ -436,7 +353,7 @@ public final class FluxHelper {
     /**
      * Fetch a property from an element
      *
-     * @param uuid           The graph UUID
+     * @param uuid         The graph UUID
      * @param elementClass The class of the element, either Vertex or Edge
      * @param key          The property key
      * @param valueClass   The property's value class
@@ -454,7 +371,7 @@ public final class FluxHelper {
     public Object getPropertyByUuid(Database db, UUID uuid, String key) {
         Entity entity = db.entity(idFromUuid(db, uuid));
         if (!FluxUtil.isReservedKey(key)) {
-            for(String property : entity.keySet()) {
+            for (String property : entity.keySet()) {
                 Optional<String> propertyName = FluxUtil.getPropertyName(property);
                 if (propertyName.isPresent()) {
                     if (key.equals(propertyName.get())) {
@@ -464,8 +381,7 @@ public final class FluxHelper {
             }
             // We didn't find the value
             return null;
-        }
-        else {
+        } else {
             return entity.get(key);
         }
     }
@@ -504,7 +420,7 @@ public final class FluxHelper {
     /**
      * Add a property to an id, returning the uncommitted statements.
      *
-     * @param uuid           The graph UUID
+     * @param uuid         The graph UUID
      * @param elementClass The class of the element, either Vertex or Edge
      * @param key          The property key
      * @param value        The property value

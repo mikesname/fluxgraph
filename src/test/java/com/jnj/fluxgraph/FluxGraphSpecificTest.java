@@ -73,6 +73,16 @@ public class FluxGraphSpecificTest {
     }
 
     @Test
+    public void testGetEdgesInTx() throws Exception {
+        Vertex v1 = graph.addVertex(null);
+        Vertex v2 = graph.addVertex(null);
+        Edge edge = v1.addEdge("test", v2);
+
+        assertEquals(edge.getId(), v1.getEdges(Direction.OUT).iterator().next().getId());
+        assertEquals(edge.getId(), v2.getEdges(Direction.IN).iterator().next().getId());
+    }
+
+    @Test
     public void testClear() throws Exception {
         Vertex v1 = graph.addVertex(null);
         Vertex v2 = graph.addVertex(null);
