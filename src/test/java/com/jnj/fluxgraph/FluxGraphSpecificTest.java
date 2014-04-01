@@ -73,6 +73,34 @@ public class FluxGraphSpecificTest {
     }
 
     @Test
+    public void testClear() throws Exception {
+        Vertex v1 = graph.addVertex(null);
+        Vertex v2 = graph.addVertex(null);
+        Edge edge = v1.addEdge("test", v2);
+        assertEquals(2L, Iterables.size(graph.getVertices()));
+        assertEquals(1L, Iterables.size(graph.getEdges()));
+        graph.commit();
+        graph.clear();
+        assertEquals(0L, Iterables.size(graph.getVertices()));
+        assertEquals(0L, Iterables.size(graph.getEdges()));
+        graph.commit();
+        assertEquals(0L, Iterables.size(graph.getVertices()));
+        assertEquals(0L, Iterables.size(graph.getEdges()));
+    }
+
+    @Test
+    public void testClearInTx() throws Exception {
+        Vertex v1 = graph.addVertex(null);
+        Vertex v2 = graph.addVertex(null);
+        Edge edge = v1.addEdge("test", v2);
+        assertEquals(2L, Iterables.size(graph.getVertices()));
+        assertEquals(1L, Iterables.size(graph.getEdges()));
+        graph.clear();
+        assertEquals(0L, Iterables.size(graph.getVertices()));
+        assertEquals(0L, Iterables.size(graph.getEdges()));
+    }
+
+    @Test
     public void testRemoveEdge() throws Exception {
         Vertex v1 = graph.addVertex(null);
         Vertex v2 = graph.addVertex(null);

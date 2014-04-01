@@ -82,7 +82,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         FEATURES.supportsDuplicateEdges = true;
         FEATURES.supportsSelfLoops = true;
         FEATURES.isPersistent = false;
-        //FEATURES.isRDFModel = false;
         FEATURES.supportsVertexIteration = true;
         FEATURES.supportsEdgeIteration = true;
         FEATURES.supportsVertexIndex = false;
@@ -171,33 +170,19 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public TimeAwareEdge getEdge(final Object id) {
-        if (null == id)
+        if (null == id) {
             throw ExceptionFactory.edgeIdCanNotBeNull();
+        }
         try {
-            UUID uuid;
-            if (id instanceof UUID) {
-                uuid = (UUID) id;
-            } else if (id instanceof String) {
-                try {
-                    uuid = UUID.fromString(id.toString());
-                } catch (IllegalArgumentException e) {
-                    return null;
-                }
-            } else {
-                return null;
-            }
+            UUID uuid = externalIdToUuid(id);
             List<Object> data = getHelper().getEdge(getTxManager().getDatabase(), uuid);
             return new FluxEdge(this, Optional.<Database>absent(), uuid, data.get(0), (String) data.get(2));
         } catch (NoSuchElementException e) {
             return null;
+        } catch (IllegalArgumentException e) {
+            return null;
         }
     }
-
-//    @Override
-//    public Iterable<Edge> getEdges() {
-//        Iterable<Datom> edges = this.getRawGraph().datoms(Database.AVET, GRAPH_ELEMENT_TYPE, GRAPH_ELEMENT_TYPE_EDGE);
-//        return new FluxIterable<Edge>(edges, this, this.getRawGraph(), Edge.class);
-//    }
 
     @Override
     public GraphQuery query() {
@@ -221,12 +206,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             tx.get().add(uuid, addition.statements.get(0), out.getId(), in.getId());
             final FluxEdge edge = new FluxEdge(this, null, uuid, addition.tempId, label);
             idResolver.get().put(addition.tempId, edge);
-
-            // Update the transaction info of both vertices (moving up their current transaction)
-//            if ((Long)inVertex.getId() >= 0 && (Long)outVertex.getId() >= 0) {
-//                addTransactionInfo((TimeAwareVertex)inVertex, (TimeAwareVertex)outVertex);
-//            }
-
             return edge;
         } catch (ExceptionInfo e) {
             if (e.toString().contains("not a valid :string for attribute")) {
@@ -253,24 +232,16 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public TimeAwareVertex getVertex(final Object id) {
-        if (null == id)
+        if (null == id) {
             throw ExceptionFactory.vertexIdCanNotBeNull();
+        }
         try {
-            UUID uuid;
-            if (id instanceof UUID) {
-                uuid = (UUID) id;
-            } else if (id instanceof String) {
-                try {
-                    uuid = UUID.fromString(id.toString());
-                } catch (IllegalArgumentException e) {
-                    return null;
-                }
-            } else {
-                return null;
-            }
+            UUID uuid = externalIdToUuid(id);
             List<Object> data = getHelper().getVertex(getTxManager().getDatabase(), uuid);
             return new FluxVertex(this, Optional.<Database>absent(), uuid, data.get(0));
         } catch (NoSuchElementException e) {
+            return null;
+        } catch (IllegalArgumentException e) {
             return null;
         }
     }
@@ -475,13 +446,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         return connection;
     }
 
-    // Ensures that add-transaction-info database function is called during the transaction execution. This will setup the linked list of transactions
-    public void addTransactionInfo(TimeAwareElement... elements) {
-//        for (TimeAwareElement element : elements) {
-//            tx.get().mod(element.getId(), Util.list(":add-transaction-info", element.getId(), element.getTimeId()));
-//        }
-    }
-
     @Override
     public void removeEdge(final Edge edge) {
         // Retract the edge element in its totality
@@ -493,15 +457,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         } else {
             txManager.del(theEdge.getId(), Util.list(":db.fn/retractEntity", theEdge.graphId));
         }
-
-        // Get the in and out vertex (as their version also needs to be updated)
-//        FluxVertex inVertex = (FluxVertex)theEdge.getVertex(Direction.IN);
-//        FluxVertex outVertex = (FluxVertex)theEdge.getVertex(Direction.OUT);
-
-        // Update the transaction info of the edge and both vertices (moving up their current transaction)
-//        if ((Long)theEdge.getId() >= 0L) {
-//            addTransactionInfo(theEdge, inVertex, outVertex);
-//        }
     }
 
     @Override
@@ -518,7 +473,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             for (Edge edge : vertex.getEdges(Direction.BOTH)) {
                 removeEdge(edge);
             }
-            txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.getId()));
+            txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.graphId));
         }
     }
 
@@ -550,5 +505,16 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     public static void debugLog(String msg, Object... args) {
         logger.log(Level.FINE, msg, args);
+    }
+
+    private UUID externalIdToUuid(final Object id) throws IllegalArgumentException {
+        if (id instanceof UUID) {
+            return (UUID) id;
+        } else if (id instanceof String) {
+            return UUID.fromString(id.toString());
+        } else {
+            throw new IllegalArgumentException(
+                    "Id cannot be interpreted as a graph UUID: " + id);
+        }
     }
 }
