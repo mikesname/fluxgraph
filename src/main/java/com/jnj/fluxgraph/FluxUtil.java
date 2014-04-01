@@ -3,6 +3,7 @@ package com.jnj.fluxgraph;
 import clojure.lang.Keyword;
 import com.google.common.base.Optional;
 import com.tinkerpop.blueprints.TimeAwareElement;
+import datomic.Connection;
 import datomic.Database;
 import datomic.Peer;
 import datomic.Util;
@@ -56,25 +57,56 @@ public class FluxUtil {
     }
 
     // Create the attribute definition if it does not exist yet
-    public static void createAttributeDefinition(final String key, final Class valueClazz, final Class elementClazz, FluxGraph graph) {
-        if (!existingAttributeDefinition(key, valueClazz, elementClazz, graph)) {
+    public static void createAttributeDefinition(final String key, final Class valueClazz, final Class elementClazz,
+            Connection connection) {
+        Keyword ident = createKey(key, valueClazz, elementClazz);
+        if (!existingAttributeDefinition(ident, connection)) {
             try {
-                Keyword ident = createKey(key, valueClazz, elementClazz);
                 String valueType = mapJavaTypeToDatomicType(valueClazz);
-                if (graph.getTransactionTime() == null) {
-                    graph.getConnection().transact(Util.list(Util.map(":db/id", Peer.tempid(":db.part/db"),
+//                if (graph.getTransactionTime() == null) {
+                    connection.transact(Util.list(Util.map(":db/id", Peer.tempid(":db.part/db"),
                                                                       ":db/ident", ident,
                                                                       ":db/valueType", valueType,
                                                                       ":db/cardinality", ":db.cardinality/one",
                                                                       ":db.install/_attribute", ":db.part/db"))).get();
-                }
-                else {
-                    graph.getConnection().transact(Util.list(Util.map(":db/id", Peer.tempid(":db.part/db"),
-                                                                      ":db/ident", ident,
-                                                                      ":db/valueType", valueType,
-                                                                      ":db/cardinality", ":db.cardinality/one",
-                                                                      ":db.install/_attribute", ":db.part/db"), datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant", graph.getTransactionTime()))).get();
-                }
+//                }
+//                else {
+//                    connection.transact(Util.list(Util.map(":db/id", Peer.tempid(":db.part/db"),
+//                                                                      ":db/ident", ident,
+//                                                                      ":db/valueType", valueType,
+//                                                                      ":db/cardinality", ":db.cardinality/one",
+//                                                                      ":db.install/_attribute", ":db.part/db"), datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant", graph.getTransactionTime()))).get();
+//                }
+            } catch (InterruptedException e) {
+                throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
+            }
+        }
+    }
+
+    public static void createIndexedAttributeDefinition(final String key, final Class valueClazz,
+            final Class elementClazz,
+            Connection connection) {
+        Keyword ident = createKey(key, valueClazz, elementClazz);
+        if (!existingAttributeDefinition(ident, connection)) {
+            try {
+                String valueType = mapJavaTypeToDatomicType(valueClazz);
+//                if (graph.getTransactionTime() == null) {
+                connection.transact(Util.list(Util.map(":db/id", Peer.tempid(":db.part/db"),
+                        ":db/ident", ident,
+                        ":db/valueType", valueType,
+                        ":db/cardinality", ":db.cardinality/one",
+                        ":db/index", true,
+                        ":db.install/_attribute", ":db.part/db"))).get();
+//                }
+//                else {
+//                    connection.transact(Util.list(Util.map(":db/id", Peer.tempid(":db.part/db"),
+//                                                                      ":db/ident", ident,
+//                                                                      ":db/valueType", valueType,
+//                                                                      ":db/cardinality", ":db.cardinality/one",
+//                                                                      ":db.install/_attribute", ":db.part/db"), datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant", graph.getTransactionTime()))).get();
+//                }
             } catch (InterruptedException e) {
                 throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
             } catch (ExecutionException e) {
@@ -84,18 +116,19 @@ public class FluxUtil {
     }
 
     // Sets/Unsets an index for a particular attribute
-    public static void setAttributeIndex(final String key, final Class elementClazz, FluxGraph graph, boolean index) {
+    public static void setAttributeIndex(final String key, final Class elementClazz, Connection connection, boolean index) {
         // For a specific key, multiple attributes could be specified in Datomic that have a different type. We need to create an index for all of them
         for (String type : types.keySet()) {
             try {
-                if (!existingAttributeDefinition(key, Class.forName(type), elementClazz, graph)) {
+                Keyword attrKeyword = createKey(key, Class.forName(type), elementClazz);
+                if (!existingAttributeDefinition(attrKeyword, connection)) {
                     // Attribute of this type does not exist, create it first
-                    createAttributeDefinition(key, Class.forName(type), elementClazz, graph);
+                    createIndexedAttributeDefinition(key, Class.forName(type), elementClazz, connection);
+                } else {
+                    connection.transact(Util.list(Util.map(":db/id", attrKeyword,
+                            ":db/index", index,
+                            ":db.alter/_attribute", ":db.part/db"))).get();
                 }
-                // Retrieve the attribute and index it
-                Object attribute = getAttributeDefinition(key, Class.forName(type), elementClazz, graph);
-                graph.getConnection().transact(Util.list(Util.map(":db/id", attribute,
-                                                                  ":db/index", index))).get();
             } catch(ClassNotFoundException e) {
                 throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
             } catch (InterruptedException e) {
@@ -107,30 +140,24 @@ public class FluxUtil {
     }
 
     // Creates an index for a particular attribute
-    public static void createAttributeIndex(final String key, final Class elementClazz, FluxGraph graph) {
-        setAttributeIndex(key, elementClazz, graph, true);
+    public static void createAttributeIndex(final String key, final Class elementClazz, final Connection connection) {
+        setAttributeIndex(key, elementClazz, connection, true);
     }
 
     // Creates an index for a particular attribute
-    public static void removeAttributeIndex(final String key, final Class elementClazz, final FluxGraph graph)  {
-        setAttributeIndex(key, elementClazz, graph, false);
-    }
-
-    // Checks whether a new attribute defintion needs to be created on the fly
-    public static boolean existingAttributeDefinition(final String key, final Class valueClazz, final Class elementClazz, final FluxGraph graph) {
-        int attributekeysize = Peer.q("[:find ?attribute " +
-                                       ":in $ ?key " +
-                                       ":where [?attribute :db/ident ?key] ]", graph.getRawGraph(), createKey(key, valueClazz, elementClazz)).size();
-        // Existing attribute
-        return attributekeysize != 0;
+    public static void removeAttributeIndex(final String key, final Class elementClazz, final Connection connection)  {
+        setAttributeIndex(key, elementClazz, connection, false);
     }
 
     // Retrieve the attribute definition (if it exists). Otherwise, it returns null
-    public static Object getAttributeDefinition(final String key, final Class valueClazz, final Class elementClazz, final FluxGraph graph) {
-        if (existingAttributeDefinition(key, valueClazz, elementClazz, graph)) {
+    public static Object getAttributeDefinition(final String key, final Class valueClazz, final Class elementClazz,
+            final Connection connection) {
+        final Keyword keyword = createKey(key, valueClazz, elementClazz);
+        if (existingAttributeDefinition(keyword, connection)) {
             Collection<List<Object>> attributekeysize = Peer.q("[:find ?attribute " +
                                                                 ":in $ ?key " +
-                                                                ":where [?attribute :db/ident ?key] ]", graph.getRawGraph(), createKey(key, valueClazz, elementClazz));
+                                                                ":where [?attribute :db/ident ?key] ]",
+                    connection.db(), keyword);
             return attributekeysize.iterator().next().get(0);
         }
         return null;
@@ -155,20 +182,15 @@ public class FluxUtil {
     }
 
     // Checks whether a new attribute defintion needs to be created on the fly
-    public static boolean existingAttributeDefinition(final Keyword key, final FluxGraph graph) {
-        int attributekeysize = Peer.q("[:find ?attribute " +
+    public static boolean existingAttributeDefinition(final Keyword key, final Connection connection) {
+        return !Peer.q("[:find ?attribute " +
                                        ":in $ ?key " +
-                                       ":where [?attribute :db/ident ?key] ]", graph.getRawGraph(), key).size();
-        // Existing attribute
-        return attributekeysize != 0;
+                                       ":where [?attribute :db/ident ?key] ]", connection.db(), key).isEmpty();
     }
 
     // Creates a unique key for each key-valuetype attribute (as only one attribute with the same name can be specified)
-    public static Keyword createKey(final String key, final Class valueClazz, final Class elementClazz) {
-        String elementType = "vertex";
-        if (elementClazz.isAssignableFrom(FluxEdge.class)) {
-            elementType = "edge";
-        }
+    public static Keyword createKey(final String key, final Class<?> valueClazz, final Class<?> elementClazz) {
+        String elementType = elementClazz.isAssignableFrom(FluxEdge.class) ? "edge" : "vertex";
         return Keyword.intern(key.replace("_","$") + "." + mapJavaTypeToDatomicType(valueClazz).split("/")[1] + "." + elementType);
     }
 
@@ -229,10 +251,11 @@ public class FluxUtil {
                                      ":where [?tx :db/txInstant ?time] ]", graph.getRawGraph(), transaction).iterator().next().get(0);
     }
 
-    public static Object getIdForAttribute(FluxGraph graph, String attribute) {
+    public static Object getIdForAttribute(Database database, String attribute) {
         return Peer.q("[:find ?entity " +
                        ":in $ ?attribute " +
-                       ":where [?entity :db/ident ?attribute] ] ", graph.getRawGraph(), Keyword.intern(attribute)).iterator().next().get(0);
+                       ":where [?entity :db/ident ?attribute] ] ", database, Keyword.intern(attribute)).iterator().next()
+                .get(0);
     }
 
     // Helper method to create a mutable map (instead of an immutable map via the datomic Util.map method)

@@ -75,7 +75,7 @@ public abstract class FluxElement implements TimeAwareElement {
 //        return finalProperties;
 
         TxManager txManager = fluxGraph.getTxManager();
-        if (txManager.isAdded(uuid)) {
+        if (txManager.newInThisTx(uuid)) {
             Set<String> finalProperties = Sets.newHashSet();
             for (String key : txManager.getPropertyKeys(uuid)) {
                 if (!FluxUtil.isReservedKey(key)) {
@@ -96,7 +96,7 @@ public abstract class FluxElement implements TimeAwareElement {
 
         FluxUtil.getPropertyName(key);
         TxManager txManager = fluxGraph.getTxManager();
-        if (txManager.isAdded(uuid)) {
+        if (txManager.newInThisTx(uuid)) {
             Map data = txManager.getData(uuid);
             for (Object dataKey : data.keySet()) {
                 Optional<String> propertyName = FluxUtil.getPropertyName(dataKey.toString());
@@ -147,8 +147,8 @@ public abstract class FluxElement implements TimeAwareElement {
             // If the property does not exist yet, create the attribute if required and create the appropriate transaction
             Keyword propKeyword = FluxUtil.createKey(key, value.getClass(), this.getClass());
 
-            FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
-            boolean isAdded = txManager.isAdded(uuid);
+            FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph.getConnection());
+            boolean isAdded = txManager.newInThisTx(uuid);
             if (isAdded) {
                 txManager.setProperty(uuid, propKeyword, value);
             } else {
@@ -157,7 +157,6 @@ public abstract class FluxElement implements TimeAwareElement {
                 if (existingValue == null || existingValue.getClass().equals(value.getClass())) {
                     txManager.mod(uuid, Util.map(":db/id", graphId, propKeyword, value));
                 } else {
-                    FluxUtil.createAttributeDefinition(key, value.getClass(), this.getClass(), fluxGraph);
                     txManager.mod(uuid, Util.list(":db/retract", graphId, propKeyword, existingValue));
                     txManager.mod(uuid, Util.map(":db/id", graphId, propKeyword, value));
                 }
@@ -197,7 +196,7 @@ public abstract class FluxElement implements TimeAwareElement {
 
                 TxManager txManager = fluxGraph.getTxManager();
 
-                if (txManager.isAdded(uuid)) {
+                if (txManager.newInThisTx(uuid)) {
                     txManager.removeProperty(uuid, propKeyword);
                 } else {
                     txManager.mod(uuid, Util.list(":db/retract", graphId, propKeyword, oldvalue));
@@ -226,7 +225,7 @@ public abstract class FluxElement implements TimeAwareElement {
     protected Database getDatabase() {
         return (database != null && database.isPresent())
                 ? database.get()
-                : fluxGraph.dbWithTx();
+                : fluxGraph.getRawGraph();
     }
 
     private void validate() {

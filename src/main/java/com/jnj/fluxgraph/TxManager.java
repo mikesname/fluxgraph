@@ -8,7 +8,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import datomic.Connection;
 import datomic.Database;
-import datomic.Util;
 
 import java.util.*;
 
@@ -97,7 +96,7 @@ final class TxManager {
                         })));
     }
 
-    public boolean isAdded(final UUID uuid) {
+    public boolean newInThisTx(final UUID uuid) {
         Op op = operations.get(uuid);
         return op != null && op.opType == OpType.add;
     }
@@ -113,7 +112,7 @@ final class TxManager {
     }
 
     public void del(UUID uuid, Object statement) {
-        if (isAdded(uuid)) {
+        if (newInThisTx(uuid)) {
             operations.remove(uuid);
             LinkedHashMap<UUID,Op> newMap = Maps.newLinkedHashMap();
             for (Map.Entry<UUID,Op> entry : operations.entrySet()) {
@@ -130,7 +129,7 @@ final class TxManager {
     }
 
     public void remove(UUID uuid) {
-        if (isAdded(uuid)) {
+        if (newInThisTx(uuid)) {
             operations.remove(uuid);
             LinkedHashMap<UUID,Op> newMap = Maps.newLinkedHashMap();
             for (Map.Entry<UUID,Op> entry : operations.entrySet()) {
@@ -146,7 +145,7 @@ final class TxManager {
     }
 
     public void setProperty(UUID uuid, Keyword key, Object value) {
-        if (isAdded(uuid)) {
+        if (newInThisTx(uuid)) {
             insertIntoStatement(operations.get(uuid), key, value);
             setDirty();
         } else {
@@ -155,7 +154,7 @@ final class TxManager {
     }
 
     public void removeProperty(UUID uuid, Keyword key) {
-        if (isAdded(uuid)) {
+        if (newInThisTx(uuid)) {
             removeFromStatement(operations.get(uuid), key);
             setDirty();
         } else {
@@ -164,14 +163,14 @@ final class TxManager {
     }
 
     public Object getProperty(UUID uuid, Keyword key) {
-        if (isAdded(uuid)) {
+        if (newInThisTx(uuid)) {
             return getStatementMap(operations.get(uuid)).get(key);
         }
         throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
     }
 
     public Set<String> getPropertyKeys(UUID uuid) {
-        if (isAdded(uuid)) {
+        if (newInThisTx(uuid)) {
             Set<String> keys = Sets.newHashSet();
             for (Object item : getStatementMap(operations.get(uuid)).keySet()) {
                 if (item instanceof String) {
@@ -186,7 +185,7 @@ final class TxManager {
     }
 
     public Map getData(UUID uuid) {
-        if (isAdded(uuid)) {
+        if (newInThisTx(uuid)) {
             return getStatementMap(operations.get(uuid));
         }
         throw new IllegalArgumentException("Item is not added in current TX: " + uuid);

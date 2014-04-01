@@ -5,11 +5,11 @@ import clojure.lang.Keyword;
 import com.google.common.base.Function;
 import com.google.common.base.Optional;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.tinkerpop.blueprints.*;
 import com.tinkerpop.blueprints.util.DefaultGraphQuery;
 import com.tinkerpop.blueprints.util.ExceptionFactory;
 import com.tinkerpop.blueprints.util.StringFactory;
+
 import static datomic.Connection.TEMPIDS;
 import static datomic.Connection.DB_AFTER;
 
@@ -28,8 +28,9 @@ import java.util.logging.Logger;
  * A Blueprints implementation of a graph on top of Datomic
  *
  * @author Davy Suvee (http://datablend.be)
+ * @author Mike Bryant (http://github.com/mikesname)
  */
-public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, TransactionalGraph {
+public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, TransactionalGraph, KeyIndexableGraph {
 
     public static final Logger logger = Logger.getLogger(FluxGraph.class.getName());
 
@@ -43,9 +44,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     public final Object GRAPH_EDGE_IN_VERTEX;
     public final Object GRAPH_EDGE_OUT_VERTEX;
     public final Object GRAPH_EDGE_LABEL;
-
-    private final FluxIndex vertexIndex;
-    private final FluxIndex edgeIndex;
 
     protected final ThreadLocal<TxManager> tx = new ThreadLocal<TxManager>() {
         protected TxManager initialValue() {
@@ -124,22 +122,19 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
         try {
             // Setup the meta model for the graph
-            if (requiresMetaModel()) {
-                setupMetaModel();
+            if (requiresMetaModel(connection.db())) {
+                setupMetaModel(connection);
             }
             // Retrieve the relevant ids for the properties (for raw index access later on)
-            GRAPH_ELEMENT_TYPE = FluxUtil.getIdForAttribute(this, "graph.element/type");
-            GRAPH_ELEMENT_TYPE_VERTEX = FluxUtil.getIdForAttribute(this, "graph.element.type/vertex");
-            GRAPH_ELEMENT_TYPE_EDGE = FluxUtil.getIdForAttribute(this, "graph.element.type/edge");
-            GRAPH_EDGE_IN_VERTEX = FluxUtil.getIdForAttribute(this, "graph.edge/inVertex");
-            GRAPH_EDGE_OUT_VERTEX = FluxUtil.getIdForAttribute(this, "graph.edge/outVertex");
-            GRAPH_EDGE_LABEL = FluxUtil.getIdForAttribute(this, "graph.edge/label");
+            GRAPH_ELEMENT_TYPE = FluxUtil.getIdForAttribute(connection.db(), "graph.element/type");
+            GRAPH_ELEMENT_TYPE_VERTEX = FluxUtil.getIdForAttribute(connection.db(), "graph.element.type/vertex");
+            GRAPH_ELEMENT_TYPE_EDGE = FluxUtil.getIdForAttribute(connection.db(), "graph.element.type/edge");
+            GRAPH_EDGE_IN_VERTEX = FluxUtil.getIdForAttribute(connection.db(), "graph.edge/inVertex");
+            GRAPH_EDGE_OUT_VERTEX = FluxUtil.getIdForAttribute(connection.db(), "graph.edge/outVertex");
+            GRAPH_EDGE_LABEL = FluxUtil.getIdForAttribute(connection.db(), "graph.edge/label");
         } catch (Exception e) {
             throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
         }
-        // Create the required indexes
-        this.vertexIndex = new FluxIndex<Vertex>("vertexIndex", this, null, Vertex.class);
-        this.edgeIndex = new FluxIndex<Edge>("edgeIndex", this, null, Edge.class);
     }
 
     @Override
@@ -181,7 +176,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         try {
             UUID uuid;
             if (id instanceof UUID) {
-                uuid = (UUID)id;
+                uuid = (UUID) id;
             } else if (id instanceof String) {
                 try {
                     uuid = UUID.fromString(id.toString());
@@ -192,7 +187,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
                 return null;
             }
             List<Object> data = getHelper().getEdge(getTxManager().getDatabase(), uuid);
-            return new FluxEdge(this, Optional.<Database>absent(), uuid, data.get(0), (String)data.get(2));
+            return new FluxEdge(this, Optional.<Database>absent(), uuid, data.get(0), (String) data.get(2));
         } catch (NoSuchElementException e) {
             return null;
         }
@@ -263,7 +258,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         try {
             UUID uuid;
             if (id instanceof UUID) {
-                uuid = (UUID)id;
+                uuid = (UUID) id;
             } else if (id instanceof String) {
                 try {
                     uuid = UUID.fromString(id.toString());
@@ -283,31 +278,23 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     @Override
     public CloseableIterable<Vertex> getVertices() {
         final FluxGraph graph = this;
-//        final Database database = dbWithTx();
-//        Iterable<Datom> vertices = this.getRawGraph().datoms(Database.AVET, this.GRAPH_ELEMENT_TYPE, this.GRAPH_ELEMENT_TYPE_VERTEX);
-//        return new WrappingCloseableIterable<Vertex>(Iterables.transform(vertices, new Function<Datom, Vertex>() {
-//            @Override
-//            public Vertex apply(Datom datom) {
-//                Object id = datom.e();
-//                UUID uuid = (UUID) database.entity(id).get(FluxHelper.ELEMENT_ID);
-//                return new FluxVertex(graph, Optional.<Database>absent(), uuid, id);
-//            }
-//        }));
+        Iterable<List<Object>> vertices = getHelper().listVertices(getTxManager().getDatabase());
 
-        return new WrappingCloseableIterable<Vertex>(Iterables.transform(getHelper().listVertices(getTxManager()
-                .getDatabase()),
+        return new WrappingCloseableIterable<Vertex>(Iterables.transform(vertices,
                 new Function<List<Object>, Vertex>() {
-            @Override
-            public FluxVertex apply(List<Object> o) {
-                return new FluxVertex(graph, Optional.<Database>absent(), (UUID)o.get(1), o.get(0));
-            }
-        }));
+                    @Override
+                    public FluxVertex apply(List<Object> o) {
+                        return new FluxVertex(graph, Optional.<Database>absent(), (UUID) o.get(1), o.get(0));
+                    }
+                }));
     }
 
     @Override
     public CloseableIterable<Edge> getEdges() {
         final FluxGraph graph = this;
-        return new WrappingCloseableIterable<Edge>(Iterables.transform(getHelper().listEdges(getTxManager().getDatabase()),
+        Iterable<List<Object>> edges = getHelper().listEdges(getTxManager().getDatabase());
+
+        return new WrappingCloseableIterable<Edge>(Iterables.transform(edges,
                 new Function<List<Object>,
                         Edge>() {
                     @Override
@@ -326,12 +313,12 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         return new WrappingCloseableIterable<Vertex>(Iterables.transform(getHelper().listVertices(getTxManager()
                 .getDatabase(), keyword, value),
                 new Function<List<Object>,
-                Vertex>() {
-            @Override
-            public FluxVertex apply(List<Object> o) {
-                return new FluxVertex(graph, Optional.<Database>absent(), (UUID) o.get(1), o.get(0));
-            }
-        }));
+                        Vertex>() {
+                    @Override
+                    public FluxVertex apply(List<Object> o) {
+                        return new FluxVertex(graph, Optional.<Database>absent(), (UUID) o.get(1), o.get(0));
+                    }
+                }));
     }
 
     @Override
@@ -347,19 +334,11 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
                 keyword,
                 value),
                 new Function<List<Object>, Edge>() {
-            @Override
-            public FluxEdge apply(List<Object> o) {
-                return new FluxEdge(graph, Optional.<Database>absent(), (UUID) o.get(1), o.get(0), (String) o.get(2));
-            }
-        }));
-    }
-
-    @Override
-    public Database getRawGraph() {
-        if (checkpointTime.get() != null) {
-            return getRawGraph(checkpointTime.get());
-        }
-        return dbWithTx();
+                    @Override
+                    public FluxEdge apply(List<Object> o) {
+                        return new FluxEdge(graph, Optional.<Database>absent(), (UUID) o.get(1), o.get(0), (String) o.get(2));
+                    }
+                }));
     }
 
     @Override
@@ -392,18 +371,18 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         // Set graph at checkpoint date1
         setCheckpointTime(date1);
         for (Object vertex : workingSet.getVertices()) {
-            factsAtDate1.addAll(((FluxVertex)getVertex(vertex)).getFacts());
+            factsAtDate1.addAll(((FluxVertex) getVertex(vertex)).getFacts());
         }
         for (Object edge : workingSet.getEdges()) {
-            factsAtDate1.addAll(((FluxEdge)getEdge(edge)).getFacts());
+            factsAtDate1.addAll(((FluxEdge) getEdge(edge)).getFacts());
         }
         // Set graph at checkpoint date2
         setCheckpointTime(date2);
         for (Object vertex : workingSet.getVertices()) {
-            factsAtDate2.addAll(((FluxVertex)getVertex(vertex)).getFacts());
+            factsAtDate2.addAll(((FluxVertex) getVertex(vertex)).getFacts());
         }
         for (Object edge : workingSet.getEdges()) {
-            factsAtDate2.addAll(((FluxEdge)getEdge(edge)).getFacts());
+            factsAtDate2.addAll(((FluxEdge) getEdge(edge)).getFacts());
         }
         // Calculate the difference between the facts of both time aware elements
         Set<Object> difference = FluxUtil.difference(factsAtDate1, factsAtDate2);
@@ -422,20 +401,20 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         return StringFactory.graphString(this, graphURI);
     }
 
-    //@Override
+    @Override
     public <T extends Element> void dropKeyIndex(String key, Class<T> elementClass) {
         if (elementClass == null) {
             throw ExceptionFactory.classForElementCannotBeNull();
         }
-        FluxUtil.removeAttributeIndex(key, elementClass, this);
+        FluxUtil.removeAttributeIndex(key, elementClass, connection);
     }
 
-    //@Override
+    @Override
     public <T extends Element> void createKeyIndex(String key, Class<T> elementClass, Parameter... parameter) {
         if (elementClass == null) {
             throw ExceptionFactory.classForElementCannotBeNull();
         }
-        FluxUtil.createAttributeIndex(key, elementClass, this);
+        FluxUtil.createAttributeIndex(key, elementClass, connection);
     }
 
     //@Override
@@ -456,15 +435,20 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         }
     }
 
-    public Database dbWithTx() {
-        return (Database)connection.db().with(Lists.newArrayList(tx.get().ops())).get(DB_AFTER);
+    public Database getRawGraph(Object transaction) {
+        Database database = getTxManager().getDatabase();
+        if (transaction == null) {
+            return database;
+        }
+        return database.asOf(transaction);
     }
 
-    public Database getRawGraph(Object transaction) {
-        if (transaction == null) {
-            return dbWithTx();
+    @Override
+    public Database getRawGraph() {
+        if (checkpointTime.get() != null) {
+            return getRawGraph(checkpointTime.get());
         }
-        return dbWithTx().asOf(transaction);
+        return getRawGraph(null);
     }
 
     public void transact() {
@@ -501,9 +485,9 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     @Override
     public void removeEdge(final Edge edge) {
         // Retract the edge element in its totality
-        FluxEdge theEdge =  (FluxEdge)edge;
+        FluxEdge theEdge = (FluxEdge) edge;
         TxManager txManager = tx.get();
-        if (txManager.isAdded(theEdge.getId())) {
+        if (txManager.newInThisTx(theEdge.getId())) {
             txManager.remove(theEdge.getId());
             idResolver.get().removeElement(theEdge);
         } else {
@@ -522,11 +506,11 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public void removeVertex(Vertex v) {
-        FluxVertex vertex = (FluxVertex)v;
+        FluxVertex vertex = (FluxVertex) v;
         // Retract the vertex element in its totality
         // Update the transaction info of the vertex
         TxManager txManager = tx.get();
-        if (txManager.isAdded(vertex.getId())) {
+        if (txManager.newInThisTx(vertex.getId())) {
             txManager.remove(vertex.getId());
             idResolver.get().removeElement(vertex);
         } else {
@@ -534,20 +518,20 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             for (Edge edge : vertex.getEdges(Direction.BOTH)) {
                 removeEdge(edge);
             }
-            txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.graphId));
+            txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.getId()));
         }
     }
 
     // Helper method to check whether the meta model of the graph still needs to be setup
-    protected boolean requiresMetaModel() {
+    protected boolean requiresMetaModel(Database database) {
 
         return !Peer.q("[:find ?entity " +
-                       ":in $ " +
-                       ":where [?entity :db/ident :graph.element/type] ] ", getRawGraph()).iterator().hasNext();
+                ":in $ " +
+                ":where [?entity :db/ident :graph.element/type] ] ", database).iterator().hasNext();
     }
 
     // Setup of the various attribute types required for FluxGraph
-    protected void setupMetaModel() throws Exception {
+    protected void setupMetaModel(Connection connection) throws Exception {
 
         getHelper().loadMetaModel(connection);
 

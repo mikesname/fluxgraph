@@ -66,11 +66,11 @@ public class FluxGraphTest extends GraphTest {
         printTestPerformance("QueryTestSuite", this.stopWatch());
     }
 
-//    public void testKeyIndexableGraphTestSuite() throws Exception {
-//        this.stopWatch();
-//        doTestSuite(new KeyIndexableGraphTestSuite(this));
-//        printTestPerformance("KeyIndexableGraphTestSuite", this.stopWatch());
-//    }
+    public void testKeyIndexableGraphTestSuite() throws Exception {
+        this.stopWatch();
+        doTestSuite(new KeyIndexableGraphTestSuite(this));
+        printTestPerformance("KeyIndexableGraphTestSuite", this.stopWatch());
+    }
 
     public void testGraphMLReaderTestSuite() throws Exception {
         this.stopWatch();
