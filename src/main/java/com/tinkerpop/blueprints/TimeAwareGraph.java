@@ -23,6 +23,12 @@ public interface TimeAwareGraph extends Graph {
     public void setTransactionTime(Date time);
 
     /**
+     * Get the time scope for the current graph.
+     * @return A date object
+     */
+    public Date getTransactionTime();
+
+    /**
      * Calculates the difference for a particular working set of vertices and edges at two different points in time
      * @param workingSet the working set of vertices and edges to calculate the difference for
      * @param date1 the first point in time

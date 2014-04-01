@@ -336,6 +336,11 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     }
 
     @Override
+    public Date getTransactionTime() {
+        return transactionTime.get();
+    }
+
+    @Override
     public Graph difference(WorkingSet workingSet, Date date1, Date date2) {
         Set<Object> factsAtDate1 = new HashSet<Object>();
         Set<Object> factsAtDate2 = new HashSet<Object>();
@@ -396,10 +401,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         return FluxUtil.getIndexedAttributes(elementClass, this);
     }
 
-    public Date getTransactionTime() {
-        return transactionTime.get();
-    }
-
     public void clear() {
         for (Vertex vertex : getVertices()) {
             removeVertex(vertex);
@@ -425,11 +426,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     public void transact() {
         TxManager txManager = tx.get();
         try {
-            // We are adding a fact which dates back to the past. Add the required meta data on the transaction
-//            if (transactionTime.get() != null) {
-//                tx.get().global(datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant",
-//                        transactionTime.get()));
-//            }
             Map map = connection.transact(txManager.ops()).get();
             txManager.flush();
             idResolver.get().resolveIds((Database) map.get(DB_AFTER), (Map) map.get(TEMPIDS));
