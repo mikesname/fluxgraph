@@ -86,9 +86,9 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
 
     @Override
     public Iterable<Vertex> getVertices(Direction direction, String... labels) {
-        return Iterables.transform(fluxGraph.getHelper().getVerticesByUuid(getDatabase(),
-                uuid, direction,
-                labels),
+        Iterable<List<Object>> vertices = fluxGraph.getHelper().getVerticesByUuid(
+                getDatabase(), uuid, direction, labels);
+        return Iterables.transform(vertices,
                 new Function<List<Object>,
                 Vertex>() {
             @Override
@@ -119,9 +119,7 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
         // Retrieve the facts of the vertex itself
         Set<Object> theFacts = super.getFacts();
         // Get the facts associated with the edges of this vertex
-        Iterator<Edge> edgesIt = getEdges(Direction.BOTH).iterator();
-        while (edgesIt.hasNext()) {
-            Edge edge = edgesIt.next();
+        for (Edge edge : getEdges(Direction.BOTH)) {
             // Add the fact that the edge entity is an edge
             theFacts.add(FluxUtil.map(":db/id", edge.getId(), ":graph.element/type", ":graph.element.type/edge"));
             // Add the out and in vertex
@@ -145,13 +143,9 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
         }));
     }
 
-//    private Iterable<Edge> getInEdges() {
-//        Iterable<Datom> inEdges = getDatabase().datoms(Database.AVET, fluxGraph.GRAPH_EDGE_IN_VERTEX, getId());
-//        return new FluxIterable<Edge>(inEdges, fluxGraph, database, Edge.class);
-//    }
-
     private CloseableIterable<Edge> getOutEdges(final String... labels) {
-        return new WrappingCloseableIterable<Edge>(Iterables.transform(fluxGraph.getHelper().getEdges(getDatabase(), uuid, Direction.OUT, labels),
+        Iterable<List<Object>> edges = fluxGraph.getHelper().getEdges(getDatabase(), uuid, Direction.OUT, labels);
+        return new WrappingCloseableIterable<Edge>(Iterables.transform(edges,
                 new Function<List<Object>, Edge>() {
             @Override
             public Edge apply(List<Object> input) {
@@ -159,11 +153,6 @@ public class FluxVertex extends FluxElement implements TimeAwareVertex {
             }
         }));
     }
-
-//    private Iterable<Edge> getOutEdges() {
-//        Iterable<Datom> outEdges = getDatabase().datoms(Database.AVET, fluxGraph.GRAPH_EDGE_OUT_VERTEX, getId());
-//        return new FluxIterable<Edge>(outEdges, fluxGraph, database, Edge.class);
-//    }
 
     @Override
     public void remove() {

@@ -7,18 +7,18 @@ import java.util.Iterator;
 /**
  * @author Davy Suvee (http://datablend.be)
  */
-public class FluxTimeIterable implements CloseableIterable {
+public class FluxTimeIterable<T extends TimeAwareElement> implements CloseableIterable<T> {
 
     private TimeAwareElement timeAwareElement;
     private boolean forward;
     private TimeAwareFilter timeAwareFilter;
 
-    public FluxTimeIterable(TimeAwareElement timeAwareElement, boolean forward) {
+    public FluxTimeIterable(T timeAwareElement, boolean forward) {
         this.timeAwareElement = timeAwareElement;
         this.forward = forward;
     }
 
-    public FluxTimeIterable(TimeAwareElement timeAwareElement, boolean forward, TimeAwareFilter timeAwareFilter) {
+    public FluxTimeIterable(T timeAwareElement, boolean forward, TimeAwareFilter timeAwareFilter) {
         this.timeAwareElement = timeAwareElement;
         this.forward = forward;
         this.timeAwareFilter = timeAwareFilter;
@@ -29,7 +29,7 @@ public class FluxTimeIterable implements CloseableIterable {
     }
 
     @Override
-    public Iterator iterator() {
+    public Iterator<T> iterator() {
         if (forward) {
             return new ForwardTimeIterator();
         }
@@ -38,7 +38,7 @@ public class FluxTimeIterable implements CloseableIterable {
         }
     }
 
-    private class BackwardTimeIterator extends TimeIterator {
+    private class BackwardTimeIterator<T> extends TimeIterator {
         @Override
         protected FluxElement getNext(TimeAwareElement element) {
             FluxElement found = (FluxElement)element.getPreviousVersion();

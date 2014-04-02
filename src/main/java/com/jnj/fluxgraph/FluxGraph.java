@@ -21,9 +21,6 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 /**
  * A Blueprints implementation of a graph on top of Datomic
  *
@@ -31,8 +28,6 @@ import java.util.logging.Logger;
  * @author Mike Bryant (http://github.com/mikesname)
  */
 public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, TransactionalGraph, KeyIndexableGraph {
-
-    public static final Logger logger = Logger.getLogger(FluxGraph.class.getName());
 
     private final String graphURI;
     private final Connection connection;
@@ -157,13 +152,13 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public void commit() {
-        debugLog("Commit... tx events: " + tx.get().size());
+        FluxUtil.debugLog("Commit... tx events: " + tx.get().size());
         transact();
     }
 
     @Override
     public void rollback() {
-        debugLog("Rollback... tx events: " + tx.get().size());
+        FluxUtil.debugLog("Rollback... tx events: " + tx.get().size());
         tx.get().flush();
         idResolver.get().clear();
     }
@@ -174,7 +169,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             throw ExceptionFactory.edgeIdCanNotBeNull();
         }
         try {
-            UUID uuid = externalIdToUuid(id);
+            UUID uuid = FluxUtil.externalIdToUuid(id);
             List<Object> data = getHelper().getEdge(getTxManager().getDatabase(), uuid);
             return new FluxEdge(this, Optional.<Database>absent(), uuid, data.get(0), (String) data.get(2));
         } catch (NoSuchElementException e) {
@@ -236,7 +231,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             throw ExceptionFactory.vertexIdCanNotBeNull();
         }
         try {
-            UUID uuid = externalIdToUuid(id);
+            UUID uuid = FluxUtil.externalIdToUuid(id);
             List<Object> data = getHelper().getVertex(getTxManager().getDatabase(), uuid);
             return new FluxVertex(this, Optional.<Database>absent(), uuid, data.get(0));
         } catch (NoSuchElementException e) {
@@ -499,18 +494,4 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         }
     }
 
-    public static void debugLog(String msg, Object... args) {
-        logger.log(Level.FINE, msg, args);
-    }
-
-    private UUID externalIdToUuid(final Object id) throws IllegalArgumentException {
-        if (id instanceof UUID) {
-            return (UUID) id;
-        } else if (id instanceof String) {
-            return UUID.fromString(id.toString());
-        } else {
-            throw new IllegalArgumentException(
-                    "Id cannot be interpreted as a graph UUID: " + id);
-        }
-    }
 }

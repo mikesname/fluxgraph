@@ -10,12 +10,15 @@ import datomic.Util;
 
 import java.util.*;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * @author Davy Suvee (http://datablend.be)
  */
 public class FluxUtil {
 
+    static final Logger logger = Logger.getLogger(FluxGraph.class.getName());
     private static final Map<String,String> types;
     private static final String RESERVED = ":graph";
 
@@ -355,4 +358,18 @@ public class FluxUtil {
         return fact.containsKey(":db/ident");
     }
 
+    static void debugLog(String msg, Object... args) {
+        logger.log(Level.FINE, msg, args);
+    }
+
+    static UUID externalIdToUuid(final Object id) throws IllegalArgumentException {
+        if (id instanceof UUID) {
+            return (UUID) id;
+        } else if (id instanceof String) {
+            return UUID.fromString(id.toString());
+        } else {
+            throw new IllegalArgumentException(
+                    "Id cannot be interpreted as a graph UUID: " + id);
+        }
+    }
 }
