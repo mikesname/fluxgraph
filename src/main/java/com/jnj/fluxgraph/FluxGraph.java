@@ -152,14 +152,14 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public void commit() {
-        FluxUtil.debugLog("Commit... tx events: " + tx.get().size());
+        FluxUtil.debugLog("Commit... tx events: " + getTxManager().size());
         transact();
     }
 
     @Override
     public void rollback() {
-        FluxUtil.debugLog("Rollback... tx events: " + tx.get().size());
-        tx.get().flush();
+        FluxUtil.debugLog("Rollback... tx events: " + getTxManager().size());
+        getTxManager().flush();
         idResolver.get().clear();
     }
 
@@ -198,8 +198,8 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             FluxVertex in = (FluxVertex) inVertex;
             FluxHelper.Addition addition = getHelper().addEdge(getTxManager().getDatabase(), uuid, label, out.graphId,
                     in.graphId);
-            tx.get().add(uuid, addition.statements.get(0), out.getId(), in.getId());
             final FluxEdge edge = new FluxEdge(this, null, uuid, addition.tempId, label);
+            getTxManager().add(uuid, addition.statements.get(0), out.getId(), in.getId());
             idResolver.get().put(addition.tempId, edge);
             return edge;
         } catch (ExceptionInfo e) {
@@ -216,10 +216,11 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         // Create the new vertex
         UUID uuid = Peer.squuid();
         FluxHelper.Addition addition = getHelper().addVertex(getTxManager().getDatabase(), uuid);
-        tx.get().add(uuid, addition.statements.get(0));
+        FluxVertex vertex = new FluxVertex(this, null, uuid, addition.tempId);
+
+        getTxManager().add(uuid, addition.statements.get(0));
 
         // Add to the dirty pile...
-        FluxVertex vertex = new FluxVertex(this, null, uuid, addition.tempId);
         idResolver.get().put(addition.tempId, vertex);
 
         return vertex;
@@ -419,7 +420,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     }
 
     public void transact() {
-        TxManager txManager = tx.get();
+        TxManager txManager = getTxManager();
         try {
             Map map = connection.transact(txManager.ops()).get();
             txManager.flush();
@@ -441,7 +442,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     public void removeEdge(final Edge edge) {
         // Retract the edge element in its totality
         FluxEdge theEdge = (FluxEdge) edge;
-        TxManager txManager = tx.get();
+        TxManager txManager = getTxManager();
         if (txManager.newInThisTx(theEdge.getId())) {
             txManager.remove(theEdge.getId());
             idResolver.get().removeElement(theEdge);
@@ -455,7 +456,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         FluxVertex vertex = (FluxVertex) v;
         // Retract the vertex element in its totality
         // Update the transaction info of the vertex
-        TxManager txManager = tx.get();
+        TxManager txManager = getTxManager();
         if (txManager.newInThisTx(vertex.getId())) {
             txManager.remove(vertex.getId());
             idResolver.get().removeElement(vertex);
@@ -481,15 +482,15 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
         getHelper().loadMetaModel(connection);
 
-//        tx.get().global(datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant",
+//        getTxManager().global(datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant",
 //                new Date(0)));
-//        connection.transact(Lists.newArrayList(tx.get().ops())).get();
-//        tx.get().flush();
+//        connection.transact(Lists.newArrayList(getTxManager().ops())).get();
+//        getTxManager().flush();
     }
 
 
     public void dumpPendingOps(FileWriter fileWriter) throws IOException {
-        for (Object pending : tx.get().ops()) {
+        for (Object pending : getTxManager().ops()) {
             fileWriter.write(pending.toString() + "\n");
         }
     }

@@ -27,24 +27,17 @@ final class IdResolver {
         revMap.put(element, tempId);
     }
 
-    public void remove(Object id) {
-        FluxElement element = dirty.get(id);
-        if (element != null) {
-            revMap.remove(element);
-        }
-    }
-
     public void removeElement(FluxElement element) {
         Object o = revMap.get(element);
         if (o != null) {
-            dirty.remove(revMap.get(o));
+            dirty.remove(o);
         }
     }
 
     public void resolveIds(Database database, Map tempIds) {
         for (Map.Entry<Object,FluxElement> entry : dirty.entrySet()) {
-            Object id = Peer.resolveTempid(database, tempIds, entry.getKey());
-            entry.getValue().graphId = id;
+            entry.getValue().graphId
+                    = Peer.resolveTempid(database, tempIds, entry.getKey());
         }
         dirty.clear();
         revMap.clear();

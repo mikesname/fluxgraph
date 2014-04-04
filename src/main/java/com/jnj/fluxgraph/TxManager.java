@@ -10,6 +10,7 @@ import datomic.Connection;
 import datomic.Database;
 
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Helper class for managing the mismatch between Blueprints and
