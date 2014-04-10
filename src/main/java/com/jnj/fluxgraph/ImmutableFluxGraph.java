@@ -26,7 +26,7 @@ public class ImmutableFluxGraph extends FluxGraph {
 //            for (Object differenceFact : differenceFacts) {
 //                addToTransaction("graph", differenceFact);
 //            }
-            transact();
+            commit();
         } catch (ExecutionException e) {
             throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE);
         } catch (InterruptedException e) {
@@ -99,7 +99,7 @@ public class ImmutableFluxGraph extends FluxGraph {
 //                ":db.install/_attribute", ":db.part/db"));
 
         // Transact it
-        transact();
+        commit();
     }
 
 }

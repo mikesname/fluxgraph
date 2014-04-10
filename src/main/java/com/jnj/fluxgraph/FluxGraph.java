@@ -10,16 +10,12 @@ import com.tinkerpop.blueprints.util.DefaultGraphQuery;
 import com.tinkerpop.blueprints.util.ExceptionFactory;
 import com.tinkerpop.blueprints.util.StringFactory;
 
-import static datomic.Connection.TEMPIDS;
-import static datomic.Connection.DB_AFTER;
-
 import com.tinkerpop.blueprints.util.WrappingCloseableIterable;
 import datomic.*;
 
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 
 /**
  * A Blueprints implementation of a graph on top of Datomic
@@ -53,11 +49,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     protected final ThreadLocal<Date> transactionTime = new ThreadLocal<Date>() {
         protected Date initialValue() {
             return null;
-        }
-    };
-    protected final ThreadLocal<IdResolver> idResolver = new ThreadLocal<IdResolver>() {
-        protected IdResolver initialValue() {
-            return new IdResolver();
         }
     };
 
@@ -153,14 +144,13 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
     @Override
     public void commit() {
         FluxUtil.debugLog("Commit... tx events: " + getTxManager().size());
-        transact();
+        getTxManager().transact();
     }
 
     @Override
     public void rollback() {
         FluxUtil.debugLog("Rollback... tx events: " + getTxManager().size());
         getTxManager().flush();
-        idResolver.get().clear();
     }
 
     @Override
@@ -199,8 +189,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
             FluxHelper.Addition addition = getHelper().addEdge(getTxManager().getDatabase(), uuid, label, out.graphId,
                     in.graphId);
             final FluxEdge edge = new FluxEdge(this, null, uuid, addition.tempId, label);
-            getTxManager().add(uuid, addition.statements.get(0), out.getId(), in.getId());
-            idResolver.get().put(addition.tempId, edge);
+            getTxManager().add(edge, addition.statements.get(0), out, in);
             return edge;
         } catch (ExceptionInfo e) {
             if (e.toString().contains("not a valid :string for attribute")) {
@@ -218,10 +207,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         FluxHelper.Addition addition = getHelper().addVertex(getTxManager().getDatabase(), uuid);
         FluxVertex vertex = new FluxVertex(this, null, uuid, addition.tempId);
 
-        getTxManager().add(uuid, addition.statements.get(0));
-
-        // Add to the dirty pile...
-        idResolver.get().put(addition.tempId, vertex);
+        getTxManager().add(vertex, addition.statements.get(0));
 
         return vertex;
     }
@@ -290,7 +276,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     @Override
     public CloseableIterable<Edge> getEdges(String key, Object value) {
-        //return edgeIndex.get(key, value);
         Keyword keyword = FluxUtil.createKey(key, value.getClass(), Edge.class);
         if (key.equals("label")) {
             keyword = Keyword.intern("graph.edge/label");
@@ -419,21 +404,6 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         return getRawGraph(null);
     }
 
-    public void transact() {
-        TxManager txManager = getTxManager();
-        try {
-            Map map = connection.transact(txManager.ops()).get();
-            txManager.flush();
-            idResolver.get().resolveIds((Database) map.get(DB_AFTER), (Map) map.get(TEMPIDS));
-        } catch (InterruptedException e) {
-            txManager.flush();
-            throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
-        } catch (ExecutionException e) {
-            txManager.flush();
-            throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
-        }
-    }
-
     public Connection getConnection() {
         return connection;
     }
@@ -443,11 +413,10 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         // Retract the edge element in its totality
         FluxEdge theEdge = (FluxEdge) edge;
         TxManager txManager = getTxManager();
-        if (txManager.newInThisTx(theEdge.getId())) {
-            txManager.remove(theEdge.getId());
-            idResolver.get().removeElement(theEdge);
+        if (txManager.newInThisTx(theEdge)) {
+            txManager.remove(theEdge);
         } else {
-            txManager.del(theEdge.getId(), Util.list(":db.fn/retractEntity", theEdge.graphId));
+            txManager.del(theEdge, Util.list(":db.fn/retractEntity", theEdge.graphId));
         }
     }
 
@@ -457,15 +426,14 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
         // Retract the vertex element in its totality
         // Update the transaction info of the vertex
         TxManager txManager = getTxManager();
-        if (txManager.newInThisTx(vertex.getId())) {
-            txManager.remove(vertex.getId());
-            idResolver.get().removeElement(vertex);
+        if (txManager.newInThisTx(vertex)) {
+            txManager.remove(vertex);
         } else {
             // Retrieve all edges associated with this vertex and remove them one bye one
             for (Edge edge : vertex.getEdges(Direction.BOTH)) {
                 removeEdge(edge);
             }
-            txManager.del(vertex.getId(), Util.list(":db.fn/retractEntity", vertex.graphId));
+            txManager.del(vertex, Util.list(":db.fn/retractEntity", vertex.graphId));
         }
     }
 
@@ -479,13 +447,7 @@ public class FluxGraph implements MetaGraph<Database>, TimeAwareGraph, Transacti
 
     // Setup of the various attribute types required for FluxGraph
     protected void setupMetaModel(Connection connection) throws Exception {
-
         getHelper().loadMetaModel(connection);
-
-//        getTxManager().global(datomic.Util.map(":db/id", datomic.Peer.tempid(":db.part/tx"), ":db/txInstant",
-//                new Date(0)));
-//        connection.transact(Lists.newArrayList(getTxManager().ops())).get();
-//        getTxManager().flush();
     }
 
 

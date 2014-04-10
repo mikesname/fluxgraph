@@ -8,9 +8,13 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import datomic.Connection;
 import datomic.Database;
+import datomic.Peer;
 
 import java.util.*;
 import java.util.concurrent.ExecutionException;
+
+import static datomic.Connection.DB_AFTER;
+import static datomic.Connection.TEMPIDS;
 
 /**
  * Helper class for managing the mismatch between Blueprints and
@@ -29,27 +33,24 @@ import java.util.concurrent.ExecutionException;
  */
 final class TxManager {
 
-    private static final UUID GLOBAL_OP = UUID.randomUUID();
-
     private static enum  OpType {
         add,
         del,
-        mod,
-        global
+        mod
     }
 
     private static class Op {
         public final OpType opType;
         public Object statement;
-        public final UUID[] touched;
-        public Op(OpType opType, Object statement, UUID... touched) {
+        public final FluxElement[] touched;
+        public Op(OpType opType, Object statement, FluxElement... touched) {
             this.opType = opType;
             this.statement = statement;
             this.touched = touched;
         }
-        public boolean concerns(UUID uuid) {
-            for (UUID t : touched) {
-                if (t.equals(uuid)) {
+        public boolean concerns(FluxElement element) {
+            for (FluxElement t : touched) {
+                if (t.equals(element)) {
                     return true;
                 }
             }
@@ -58,7 +59,17 @@ final class TxManager {
     }
 
     private Connection connection;
-    private LinkedHashMap<UUID, Op> operations;
+
+    // List of pending graph operations
+    private LinkedHashMap<FluxElement, Op> operations;
+    // List of dirty elements that need their temp IDs resolved
+    // to permanent graph IDs following a commit.
+    private final Map<Object,FluxElement> dirty
+            = Maps.newHashMap();
+    // Reverse lookup of dirty IDs
+    private final Map<FluxElement,Object> revMap
+            = Maps.newHashMap();
+
 
     private Database database = null;
 
@@ -97,55 +108,50 @@ final class TxManager {
                         })));
     }
 
-    public boolean newInThisTx(final UUID uuid) {
+    public boolean newInThisTx(final FluxElement uuid) {
         Op op = operations.get(uuid);
         return op != null && op.opType == OpType.add;
     }
 
-    public void add(UUID uuid, Object statement, UUID... touched) {
-        operations.put(uuid, new Op(OpType.add, statement, touched));
+    public void add(FluxElement element, Object statement, FluxElement... touched) {
+        operations.put(element, new Op(OpType.add, statement, touched));
+        dirty.put(element.graphId, element);
+        revMap.put(element, element.graphId);
         appendOp(statement);
     }
 
-    public void mod(UUID uuid, Object statement) {
-        operations.put(uuid, new Op(OpType.mod, statement));
+    public void mod(FluxElement element, Object statement) {
+        operations.put(element, new Op(OpType.mod, statement));
         appendOp(statement);
     }
 
-    public void del(UUID uuid, Object statement) {
-        if (newInThisTx(uuid)) {
-            operations.remove(uuid);
-            LinkedHashMap<UUID,Op> newMap = Maps.newLinkedHashMap();
-            for (Map.Entry<UUID,Op> entry : operations.entrySet()) {
-                if (!entry.getValue().concerns(uuid)) {
-                    newMap.put(entry.getKey(), entry.getValue());
-                }
-            }
-            operations = newMap;
-            setDirty();
+    public void del(FluxElement element, Object statement) {
+        if (newInThisTx(element)) {
+            remove(element);
         } else {
-            operations.put(uuid, new Op(OpType.del, statement));
+            operations.put(element, new Op(OpType.del, statement));
             appendOp(statement);
         }
     }
 
-    public void remove(UUID uuid) {
-        if (newInThisTx(uuid)) {
-            operations.remove(uuid);
-            LinkedHashMap<UUID,Op> newMap = Maps.newLinkedHashMap();
-            for (Map.Entry<UUID,Op> entry : operations.entrySet()) {
-                if (!entry.getValue().concerns(uuid)) {
-                    newMap.put(entry.getKey(), entry.getValue());
-                }
-            }
-            operations = newMap;
-            setDirty();
-        } else {
-            throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
+    public void remove(FluxElement element) {
+        operations.remove(element);
+        Object o = revMap.get(element);
+        if (o != null) {
+            dirty.remove(o);
         }
+
+        LinkedHashMap<FluxElement,Op> newMap = Maps.newLinkedHashMap();
+        for (Map.Entry<FluxElement,Op> entry : operations.entrySet()) {
+            if (!entry.getValue().concerns(element)) {
+                newMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+        operations = newMap;
+        setDirty();
     }
 
-    public void setProperty(UUID uuid, Keyword key, Object value) {
+    public void setProperty(FluxElement uuid, Keyword key, Object value) {
         if (newInThisTx(uuid)) {
             insertIntoStatement(operations.get(uuid), key, value);
             setDirty();
@@ -154,7 +160,7 @@ final class TxManager {
         }
     }
 
-    public void removeProperty(UUID uuid, Keyword key) {
+    public void removeProperty(FluxElement uuid, Keyword key) {
         if (newInThisTx(uuid)) {
             removeFromStatement(operations.get(uuid), key);
             setDirty();
@@ -163,14 +169,7 @@ final class TxManager {
         }
     }
 
-    public Object getProperty(UUID uuid, Keyword key) {
-        if (newInThisTx(uuid)) {
-            return getStatementMap(operations.get(uuid)).get(key);
-        }
-        throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
-    }
-
-    public Set<String> getPropertyKeys(UUID uuid) {
+    public Set<String> getPropertyKeys(FluxElement uuid) {
         if (newInThisTx(uuid)) {
             Set<String> keys = Sets.newHashSet();
             for (Object item : getStatementMap(operations.get(uuid)).keySet()) {
@@ -185,20 +184,30 @@ final class TxManager {
         throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
     }
 
-    public Map getData(UUID uuid) {
+    public Map getData(FluxElement uuid) {
         if (newInThisTx(uuid)) {
             return getStatementMap(operations.get(uuid));
         }
         throw new IllegalArgumentException("Item is not added in current TX: " + uuid);
     }
 
-    public void global(Object statement) {
-        operations.put(GLOBAL_OP, new Op(OpType.global, statement));
-        appendOp(statement);
+    public void transact() {
+        try {
+            Map map = connection.transact(ops()).get();
+            resolveIds((Database) map.get(DB_AFTER), (Map) map.get(TEMPIDS));
+        } catch (InterruptedException e) {
+            throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
+        } catch (ExecutionException e) {
+            throw new RuntimeException(FluxGraph.DATOMIC_ERROR_EXCEPTION_MESSAGE, e);
+        } finally {
+            flush();
+        }
     }
 
     public void flush() {
         operations.clear();
+        revMap.clear();
+        dirty.clear();
         setDirty();
     }
 
@@ -223,5 +232,12 @@ final class TxManager {
 
     public long size() {
         return operations.size();
+    }
+
+    private void resolveIds(Database database, Map tempIds) {
+        for (Map.Entry<Object,FluxElement> entry : dirty.entrySet()) {
+            entry.getValue().graphId
+                    = Peer.resolveTempid(database, tempIds, entry.getKey());
+        }
     }
 }
